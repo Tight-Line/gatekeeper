@@ -1,0 +1,9 @@
+# Relay client test configuration
+# Run with: ./bin/gatekeeper-relay -config config/test-relay-client.yaml
+
+server: "http://localhost:8080"
+
+channels:
+  - name: test-channel
+    token: "test-token-123"
+    destination: "https://httpbin.org/post"

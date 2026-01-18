@@ -1,0 +1,23 @@
+# Relay server test configuration
+# Run with: ./bin/gatekeeperd -config config/test-relay-server.yaml -listen :8080
+
+global:
+  metrics_port: 9090
+  log_level: info
+
+ip_allowlists:
+  any:
+    cidrs:
+      - "0.0.0.0/0"
+      - "::/0"
+
+verifiers:
+  test:
+    type: noop
+
+routes:
+  - hostname: localhost
+    path: /relay
+    ip_allowlist: any
+    verifier: test
+    relay_token: "test-token-123"

@@ -1,0 +1,24 @@
+# gatekeeper-relay configuration example
+#
+# This file configures the relay client that runs inside a private network.
+# It connects outbound to the gatekeeper server and polls for webhooks to
+# deliver locally.
+#
+# Environment variables are supported using ${VAR_NAME} syntax.
+
+# The gatekeeper server to connect to
+server: "https://webhooks.example.com"
+
+# Channels to poll for webhooks
+# Each channel has:
+#   - name: A descriptive name for logging
+#   - token: The relay token (must match route config on server)
+#   - destination: Local URL to forward received webhooks to
+channels:
+  - name: slack-webhooks
+    token: "${RELAY_TOKEN_SLACK}"
+    destination: "http://localhost:8080/webhooks/slack"
+
+  - name: github-webhooks
+    token: "${RELAY_TOKEN_GITHUB}"
+    destination: "http://localhost:8080/webhooks/github"

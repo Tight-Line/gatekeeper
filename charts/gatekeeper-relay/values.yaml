@@ -1,0 +1,55 @@
+replicaCount: 1
+
+image:
+  repository: gatekeeper-relay
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Gatekeeper server URL to connect to
+server: "https://webhooks.example.com"
+
+# Max consecutive connection failures before exiting (default: 10)
+# This allows the relay client to exit when the server is permanently unavailable
+# so that Kubernetes can restart the pod
+maxConsecutiveFailures: 10
+
+# Relay channels configuration
+# Each channel polls for webhooks using a token and forwards to a local destination
+channels: []
+#  - name: slack-webhooks
+#    tokenKey: RELAY_TOKEN_SLACK        # Key in secrets/existingSecret
+#    destination: http://backend:8080/webhooks/slack
+#  - name: github-webhooks
+#    tokenKey: RELAY_TOKEN_GITHUB
+#    destination: http://backend:8080/webhooks/github
+
+# Secret values (will be created as a Secret)
+# Use existingSecret instead if secrets are managed externally
+secrets: {}
+#  RELAY_TOKEN_SLACK: "your-relay-token-here"
+#  RELAY_TOKEN_GITHUB: "your-relay-token-here"
+
+# Use an existing secret instead of creating one
+existingSecret: ""
+
+# Resource limits
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Pod settings
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: gatekeeper-relay
+description: Relay client for gatekeeper that enables webhook delivery to private networks
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - webhook
+  - relay
+  - proxy
+  - private-network
+maintainers:
+  - name: Tight Line
+    email: certs@example.com

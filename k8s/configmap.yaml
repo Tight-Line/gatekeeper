@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gatekeeper-config
+  labels:
+    app: gatekeeper
+data:
+  config.yaml: |
+    global:
+      acme_email: "certs@example.com"
+      acme_cache_dir: "/var/cache/gatekeeper/certs"
+      metrics_port: 9090
+      log_level: info
+
+    ip_allowlists:
+      aws:
+        fetch_url: "https://ip-ranges.amazonaws.com/ip-ranges.json"
+        fetch_jq: ".prefixes[].ip_prefix"
+        refresh_interval: 24h
+
+      google-cloud:
+        fetch_url: "https://www.gstatic.com/ipranges/cloud.json"
+        fetch_jq: ".prefixes[].ipv4Prefix"
+        refresh_interval: 24h
+
+      google:
+        fetch_url: "https://www.gstatic.com/ipranges/goog.json"
+        fetch_jq: ".prefixes[].ipv4Prefix"
+        refresh_interval: 24h
+
+      internal-only:
+        cidrs:
+          - "10.0.0.0/8"
+          - "172.16.0.0/12"
+          - "192.168.0.0/16"
+
+    verifiers:
+      avvo-slack:
+        type: slack
+        signing_secret: "${AVVO_SLACK_SIGNING_SECRET}"
+        max_timestamp_age: 5m
+
+      avvo-gcal:
+        type: api_key
+        header: "X-Goog-Channel-Token"
+        token: "${AVVO_GCAL_CHANNEL_TOKEN}"
+
+      nolo-slack:
+        type: slack
+        signing_secret: "${NOLO_SLACK_SIGNING_SECRET}"
+        max_timestamp_age: 5m
+
+      martindale-github:
+        type: github
+        secret: "${MARTINDALE_GITHUB_WEBHOOK_SECRET}"
+
+      none:
+        type: noop
+
+    routes:
+      - hostname: slack-webhooks.testing.avvo.tech
+        path: /events
+        ip_allowlist: aws
+        verifier: avvo-slack
+        destination: http://avvo-backend.avvo.svc.cluster.local:8080/webhooks/slack
+
+      - hostname: gcal-webhooks.testing.avvo.tech
+        path: /notify
+        ip_allowlist: google
+        verifier: avvo-gcal
+        destination: http://avvo-backend.avvo.svc.cluster.local:8080/webhooks/gcal
+
+      - hostname: nolo-slack-webhooks.example.com
+        path: /events
+        ip_allowlist: aws
+        verifier: nolo-slack
+        destination: http://nolo-backend.nolo.svc.cluster.local:3000/api/slack
+
+      - hostname: martindale-github-webhooks.example.com
+        path: /hooks
+        ip_allowlist: internal-only
+        verifier: martindale-github
+        destination: http://martindale-backend.martindale.svc.cluster.local:8000/hooks/github

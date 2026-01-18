@@ -1,0 +1,246 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"regexp"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config is the root configuration structure
+type Config struct {
+	Global       GlobalConfig              `yaml:"global"`
+	IPAllowlists map[string]IPAllowlist    `yaml:"ip_allowlists"`
+	Verifiers    map[string]VerifierConfig `yaml:"verifiers"`
+	Routes       []RouteConfig             `yaml:"routes"`
+}
+
+// GlobalConfig contains global settings
+type GlobalConfig struct {
+	ACMEEmail    string `yaml:"acme_email"`
+	ACMECacheDir string `yaml:"acme_cache_dir"`
+	MetricsPort  int    `yaml:"metrics_port"`
+	LogLevel     string `yaml:"log_level"`
+	MaxBodySize  int64  `yaml:"max_body_size"` // Maximum request body size in bytes (default: 10MB)
+}
+
+// DefaultMaxBodySize is the default maximum request body size (10MB)
+const DefaultMaxBodySize = 10 * 1024 * 1024
+
+// IPAllowlist defines a named set of allowed IP ranges
+type IPAllowlist struct {
+	// Static CIDRs
+	CIDRs []string `yaml:"cidrs,omitempty"`
+
+	// Dynamic fetching
+	FetchURL        string        `yaml:"fetch_url,omitempty"`
+	FetchJQ         string        `yaml:"fetch_jq,omitempty"` // jq expression to extract CIDRs from JSON
+	RefreshInterval time.Duration `yaml:"refresh_interval,omitempty"`
+}
+
+// VerifierConfig defines a webhook signature verifier
+type VerifierConfig struct {
+	Type string `yaml:"type"` // slack, github, shopify, api_key, hmac, noop
+
+	// For slack verifier
+	SigningSecret   string        `yaml:"signing_secret,omitempty"`
+	MaxTimestampAge time.Duration `yaml:"max_timestamp_age,omitempty"`
+
+	// For api_key verifier
+	Header string `yaml:"header,omitempty"`
+	Token  string `yaml:"token,omitempty"`
+
+	// For github/shopify/hmac verifiers
+	Secret string `yaml:"secret,omitempty"`
+
+	// For generic hmac verifier
+	Hash     string `yaml:"hash,omitempty"`     // SHA256, SHA512
+	Encoding string `yaml:"encoding,omitempty"` // hex, base64
+}
+
+// RouteConfig defines a proxy route
+type RouteConfig struct {
+	Hostname     string `yaml:"hostname"`
+	Path         string `yaml:"path"`
+	IPAllowlist  string `yaml:"ip_allowlist"`
+	Verifier     string `yaml:"verifier"`
+	Destination  string `yaml:"destination,omitempty"`   // Direct delivery URL
+	RelayToken   string `yaml:"relay_token,omitempty"`   // Relay delivery token (mutually exclusive with destination)
+	PreserveHost bool   `yaml:"preserve_host,omitempty"` // Pass original Host header to destination (default: false)
+}
+
+// Load reads and parses a config file, interpolating environment variables
+func Load(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading config file: %w", err)
+	}
+
+	return parse(data)
+}
+
+// LoadFromEnv loads configuration from the GATEKEEPERD_CONFIG environment variable.
+// Returns nil if the env var is not set.
+func LoadFromEnv() (*Config, error) {
+	data := os.Getenv("GATEKEEPERD_CONFIG")
+	if data == "" {
+		return nil, nil
+	}
+
+	return parse([]byte(data))
+}
+
+// LoadAuto loads configuration from env var GATEKEEPERD_CONFIG if set,
+// otherwise falls back to the specified file path.
+func LoadAuto(defaultPath string) (*Config, error) {
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if cfg != nil {
+		return cfg, nil
+	}
+	return Load(defaultPath)
+}
+
+// parse parses YAML config data with env var interpolation
+func parse(data []byte) (*Config, error) {
+	// Interpolate environment variables
+	data = []byte(interpolateEnvVars(string(data)))
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validating config: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// envVarPattern matches ${VAR_NAME} patterns
+var envVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// interpolateEnvVars replaces ${VAR_NAME} with the value of the environment variable
+func interpolateEnvVars(input string) string {
+	return envVarPattern.ReplaceAllStringFunc(input, func(match string) string {
+		// Extract variable name from ${VAR_NAME}
+		varName := match[2 : len(match)-1]
+		if value, exists := os.LookupEnv(varName); exists {
+			return value
+		}
+		// Return empty string if env var not set
+		return ""
+	})
+}
+
+// Validate checks that the configuration is valid
+func (c *Config) Validate() error {
+	// Check that all routes reference valid verifiers and allowlists
+	for i, route := range c.Routes {
+		if route.Hostname == "" {
+			return fmt.Errorf("route %d: hostname is required", i)
+		}
+		if route.Path == "" {
+			return fmt.Errorf("route %d: path is required", i)
+		}
+		if route.Destination == "" && route.RelayToken == "" {
+			return fmt.Errorf("route %d: either destination or relay_token is required", i)
+		}
+		if route.Destination != "" && route.RelayToken != "" {
+			return fmt.Errorf("route %d: destination and relay_token are mutually exclusive", i)
+		}
+		if route.IPAllowlist != "" {
+			if _, ok := c.IPAllowlists[route.IPAllowlist]; !ok {
+				return fmt.Errorf("route %d: ip_allowlist %q not found", i, route.IPAllowlist)
+			}
+		}
+		if route.Verifier != "" {
+			if _, ok := c.Verifiers[route.Verifier]; !ok {
+				return fmt.Errorf("route %d: verifier %q not found", i, route.Verifier)
+			}
+		}
+	}
+
+	// Validate verifier configs
+	for name, v := range c.Verifiers {
+		switch v.Type {
+		case "slack":
+			if v.SigningSecret == "" {
+				return fmt.Errorf("verifier %q: signing_secret is required for slack verifier", name)
+			}
+		case "github", "shopify":
+			if v.Secret == "" {
+				return fmt.Errorf("verifier %q: secret is required for %s verifier", name, v.Type)
+			}
+		case "api_key":
+			if v.Header == "" {
+				return fmt.Errorf("verifier %q: header is required for api_key verifier", name)
+			}
+			if v.Token == "" {
+				return fmt.Errorf("verifier %q: token is required for api_key verifier", name)
+			}
+		case "hmac":
+			if v.Secret == "" {
+				return fmt.Errorf("verifier %q: secret is required for hmac verifier", name)
+			}
+			if v.Header == "" {
+				return fmt.Errorf("verifier %q: header is required for hmac verifier", name)
+			}
+			if v.Hash == "" {
+				return fmt.Errorf("verifier %q: hash is required for hmac verifier (SHA256 or SHA512)", name)
+			}
+			if v.Encoding == "" {
+				return fmt.Errorf("verifier %q: encoding is required for hmac verifier (hex or base64)", name)
+			}
+		case "noop":
+			// No validation needed
+		case "":
+			return fmt.Errorf("verifier %q: type is required", name)
+		default:
+			return fmt.Errorf("verifier %q: unknown type %q", name, v.Type)
+		}
+	}
+
+	// Validate IP allowlists
+	for name, al := range c.IPAllowlists {
+		if len(al.CIDRs) == 0 && al.FetchURL == "" {
+			return fmt.Errorf("ip_allowlist %q: must have either cidrs or fetch_url", name)
+		}
+		if al.FetchURL != "" && al.FetchJQ == "" {
+			return fmt.Errorf("ip_allowlist %q: fetch_jq is required when fetch_url is set", name)
+		}
+	}
+
+	return nil
+}
+
+// GetHostnames returns all unique hostnames configured in routes
+func (c *Config) GetHostnames() []string {
+	seen := make(map[string]bool)
+	var hostnames []string
+	for _, route := range c.Routes {
+		if !seen[route.Hostname] {
+			seen[route.Hostname] = true
+			hostnames = append(hostnames, route.Hostname)
+		}
+	}
+	return hostnames
+}
+
+// GetRelayTokens returns all unique relay tokens configured in routes
+func (c *Config) GetRelayTokens() []string {
+	seen := make(map[string]bool)
+	var tokens []string
+	for _, route := range c.Routes {
+		if route.RelayToken != "" && !seen[route.RelayToken] {
+			seen[route.RelayToken] = true
+			tokens = append(tokens, route.RelayToken)
+		}
+	}
+	return tokens
+}

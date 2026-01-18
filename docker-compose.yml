@@ -1,0 +1,78 @@
+# Docker Compose for local development and testing
+# Usage:
+#   docker-compose up              # Start server only
+#   docker-compose --profile relay up  # Start server + relay client
+#   docker-compose down            # Stop all services
+
+services:
+  # Gatekeeper server
+  gatekeeperd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"    # HTTP
+      - "9090:9090"    # Metrics
+    environment:
+      - GATEKEEPERD_CONFIG
+    configs:
+      - source: server-config
+        target: /etc/gatekeeper/config.yaml
+    command: ["-config", "/etc/gatekeeper/config.yaml", "-listen", ":8080"]
+
+  # Mock backend for testing webhook delivery
+  mock-backend:
+    image: hashicorp/http-echo:latest
+    command: ["-text", '{"status":"ok"}']
+    ports:
+      - "8081:5678"
+
+  # Gatekeeper relay client (optional, use --profile relay)
+  gatekeeper-relay:
+    build:
+      context: .
+      dockerfile: Dockerfile.relay
+    profiles:
+      - relay
+    environment:
+      - GATEKEEPER_RELAY_CONFIG
+      - RELAY_TOKEN=${RELAY_TOKEN:-test-relay-token}
+    configs:
+      - source: relay-config
+        target: /etc/gatekeeper-relay/config.yaml
+    command: ["-config", "/etc/gatekeeper-relay/config.yaml"]
+    depends_on:
+      - gatekeeperd
+      - mock-backend
+
+configs:
+  server-config:
+    content: |
+      global:
+        log_level: debug
+        metrics_port: 9090
+
+      routes:
+        - hostname: localhost
+          path: /webhook
+          verifier: noop
+          destination: http://mock-backend:5678
+
+        - hostname: localhost
+          path: /relay
+          verifier: noop
+          relay_token: "${RELAY_TOKEN}"
+
+      verifiers:
+        noop:
+          type: noop
+
+  relay-config:
+    content: |
+      server: http://gatekeeperd:8080
+      max_consecutive_failures: 10
+
+      channels:
+        - name: test
+          token: "${RELAY_TOKEN}"
+          destination: http://mock-backend:5678

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper
+  labels:
+    app: gatekeeper
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gatekeeper
+  template:
+    metadata:
+      labels:
+        app: gatekeeper
+    spec:
+      containers:
+        - name: gatekeeper
+          image: gatekeeper:latest
+          args:
+            - "-config=/etc/gatekeeper/config.yaml"
+            - "-tls"
+          ports:
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: gatekeeper-secrets
+          volumeMounts:
+            - name: config
+              mountPath: /etc/gatekeeper
+              readOnly: true
+            - name: acme-cache
+              mountPath: /var/cache/gatekeeper/certs
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: gatekeeper-config
+        - name: acme-cache
+          persistentVolumeClaim:
+            claimName: gatekeeper-acme-cache
