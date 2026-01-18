@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shopify/orders_create",
+  "title": "Shopify Order Created",
+  "description": "Schema for Shopify orders/create webhook",
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": {
+      "type": "integer",
+      "description": "Order ID"
+    },
+    "email": {
+      "type": ["string", "null"],
+      "format": "email",
+      "description": "Customer email"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp"
+    },
+    "number": {
+      "type": "integer",
+      "description": "Order number"
+    },
+    "note": {
+      "type": ["string", "null"],
+      "description": "Order note"
+    },
+    "total_price": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]{2})?$",
+      "description": "Total price as string"
+    },
+    "subtotal_price": {
+      "type": "string",
+      "description": "Subtotal price as string"
+    },
+    "total_tax": {
+      "type": "string",
+      "description": "Total tax as string"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 4217 currency code"
+    },
+    "financial_status": {
+      "type": ["string", "null"],
+      "enum": ["pending", "authorized", "partially_paid", "paid", "partially_refunded", "refunded", "voided", null],
+      "description": "Payment status"
+    },
+    "fulfillment_status": {
+      "type": ["string", "null"],
+      "enum": ["fulfilled", "partial", "restocked", null],
+      "description": "Fulfillment status"
+    },
+    "line_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "quantity"],
+        "properties": {
+          "id": {"type": "integer"},
+          "title": {"type": "string"},
+          "quantity": {"type": "integer"},
+          "price": {"type": "string"}
+        }
+      }
+    },
+    "shipping_address": {
+      "type": ["object", "null"],
+      "properties": {
+        "first_name": {"type": "string"},
+        "last_name": {"type": "string"},
+        "address1": {"type": "string"},
+        "city": {"type": "string"},
+        "province": {"type": "string"},
+        "country": {"type": "string"},
+        "zip": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: gatekeeperd
+description: Webhook authentication proxy server for validating and forwarding webhooks
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - webhook
+  - proxy
+  - authentication
+  - slack
+  - github
+  - relay
+maintainers:
+  - name: Tight Line
+    email: certs@example.com

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slack/url_verification",
+  "title": "Slack URL Verification",
+  "description": "Schema for Slack URL verification challenge",
+  "type": "object",
+  "required": ["type", "challenge"],
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "Deprecated verification token"
+    },
+    "type": {
+      "type": "string",
+      "const": "url_verification",
+      "description": "Must be url_verification for challenge requests"
+    },
+    "challenge": {
+      "type": "string",
+      "description": "Challenge string to echo back"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "metadata": {
+    "provider": "slack",
+    "event_type": "event_callback",
+    "description": "Standard message event from Slack Events API"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/webhooks/slack",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Slack-Request-Timestamp": "1234567890",
+      "X-Slack-Signature": "v0=test-signature-placeholder"
+    },
+    "body": {
+      "token": "REDACTED",
+      "team_id": "T0001",
+      "api_app_id": "A0001",
+      "event": {
+        "type": "message",
+        "channel": "C0001",
+        "user": "U0001",
+        "text": "Hello, world!",
+        "ts": "1234567890.123456"
+      },
+      "type": "event_callback",
+      "event_id": "Ev0001",
+      "event_time": 1234567890
+    }
+  },
+  "signing_secret": "test-signing-secret"
+}

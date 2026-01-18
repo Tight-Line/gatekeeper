@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "provider": "github",
+    "event_type": "push",
+    "description": "Push event with a single commit"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/webhooks/github",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-GitHub-Event": "push",
+      "X-GitHub-Delivery": "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+      "X-Hub-Signature-256": "sha256=test-signature-placeholder"
+    },
+    "body": {
+      "ref": "refs/heads/main",
+      "before": "0000000000000000000000000000000000000000",
+      "after": "abc123def456789012345678901234567890abcd",
+      "repository": {
+        "id": 12345,
+        "name": "example-repo",
+        "full_name": "example-org/example-repo",
+        "private": false
+      },
+      "pusher": {
+        "name": "example-user",
+        "email": "user@example.com"
+      },
+      "sender": {
+        "login": "example-user",
+        "id": 1234
+      },
+      "commits": [
+        {
+          "id": "abc123def456789012345678901234567890abcd",
+          "message": "Initial commit",
+          "timestamp": "2024-01-15T10:30:00Z",
+          "author": {
+            "name": "Example User",
+            "email": "user@example.com"
+          }
+        }
+      ],
+      "head_commit": {
+        "id": "abc123def456789012345678901234567890abcd",
+        "message": "Initial commit"
+      }
+    }
+  },
+  "signing_secret": "test-webhook-secret"
+}

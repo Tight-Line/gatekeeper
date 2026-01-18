@@ -1,0 +1,29 @@
+# Simple test configuration - no env vars required
+# Run with: ./bin/gatekeeperd -config config/test.yaml -listen :8080
+
+global:
+  metrics_port: 9090
+  log_level: info
+
+ip_allowlists:
+  any:
+    cidrs:
+      - "0.0.0.0/0"
+
+verifiers:
+  # Noop verifier for testing - accepts all requests
+  test:
+    type: noop
+
+routes:
+  # Direct forwarding test route
+  - hostname: localhost
+    path: /webhook
+    verifier: test
+    destination: http://httpbin.org/post
+
+  # Relay test route - set RELAY_TOKEN env var to enable
+  # - hostname: localhost
+  #   path: /relay
+  #   verifier: test
+  #   relay_token: "${RELAY_TOKEN}"

@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gatekeeperd.fullname" . }}-config
+  labels:
+    {{- include "gatekeeperd.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    global:
+      acme_email: {{ .Values.tls.acmeEmail | quote }}
+      acme_cache_dir: {{ .Values.tls.cacheDir | quote }}
+      metrics_port: {{ .Values.metrics.port }}
+      log_level: {{ .Values.logging.level }}
+
+    ip_allowlists:
+      {{- range $name, $allowlist := .Values.ipAllowlists }}
+      {{ $name }}:
+        {{- if $allowlist.cidrs }}
+        cidrs:
+          {{- range $allowlist.cidrs }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if $allowlist.fetchUrl }}
+        fetch_url: {{ $allowlist.fetchUrl | quote }}
+        fetch_jq: {{ $allowlist.fetchJq | quote }}
+        refresh_interval: {{ $allowlist.refreshInterval }}
+        {{- end }}
+      {{- end }}
+
+    verifiers:
+      {{- range $name, $verifier := .Values.verifiers }}
+      {{ $name }}:
+        type: {{ $verifier.type }}
+        {{- if eq $verifier.type "slack" }}
+        signing_secret: ${{"{"}}{{ $verifier.signingSecretKey }}{{"}"}}
+        {{- if $verifier.maxTimestampAge }}
+        max_timestamp_age: {{ $verifier.maxTimestampAge }}
+        {{- end }}
+        {{- else if eq $verifier.type "github" }}
+        secret: ${{"{"}}{{ $verifier.secretKey }}{{"}"}}
+        {{- else if eq $verifier.type "shopify" }}
+        secret: ${{"{"}}{{ $verifier.secretKey }}{{"}"}}
+        {{- else if eq $verifier.type "api_key" }}
+        header: {{ $verifier.header | quote }}
+        token: ${{"{"}}{{ $verifier.tokenKey }}{{"}"}}
+        {{- else if eq $verifier.type "hmac" }}
+        header: {{ $verifier.header | quote }}
+        secret: ${{"{"}}{{ $verifier.secretKey }}{{"}"}}
+        hash: {{ $verifier.hash | quote }}
+        encoding: {{ $verifier.encoding | quote }}
+        {{- end }}
+      {{- end }}
+
+    routes:
+      {{- range .Values.routes }}
+      - hostname: {{ .hostname | quote }}
+        path: {{ .path | quote }}
+        {{- if .ipAllowlist }}
+        ip_allowlist: {{ .ipAllowlist | quote }}
+        {{- end }}
+        {{- if .verifier }}
+        verifier: {{ .verifier | quote }}
+        {{- end }}
+        {{- if .destination }}
+        destination: {{ .destination | quote }}
+        {{- else if .relayTokenKey }}
+        relay_token: ${{"{"}}{{ .relayTokenKey }}{{"}"}}
+        {{- end }}
+      {{- end }}

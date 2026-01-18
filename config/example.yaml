@@ -1,0 +1,111 @@
+# Gatekeeper Example Configuration
+# Copy this to /etc/gatekeeper/config.yaml and customize
+
+global:
+  acme_email: "certs@example.com"
+  acme_cache_dir: "/var/cache/gatekeeper/certs"
+  metrics_port: 9090
+  log_level: info
+
+# Named IP allowlists (CIDRs)
+# Each list can be static or dynamically fetched
+# Dynamic lists use fetch_url + fetch_jq (jq query to extract CIDR strings)
+ip_allowlists:
+  # AWS IP ranges - dynamically fetched
+  aws:
+    fetch_url: "https://ip-ranges.amazonaws.com/ip-ranges.json"
+    fetch_jq: ".prefixes[].ip_prefix"
+    refresh_interval: 24h
+
+  # AWS EC2 only (useful for Slack which runs on EC2)
+  aws-ec2:
+    fetch_url: "https://ip-ranges.amazonaws.com/ip-ranges.json"
+    fetch_jq: '.prefixes[] | select(.service=="EC2") | .ip_prefix'
+    refresh_interval: 24h
+
+  # Google Cloud IP ranges - dynamically fetched
+  google-cloud:
+    fetch_url: "https://www.gstatic.com/ipranges/cloud.json"
+    fetch_jq: ".prefixes[].ipv4Prefix"
+    refresh_interval: 24h
+
+  # Google general IP ranges (includes Workspace/Calendar)
+  google:
+    fetch_url: "https://www.gstatic.com/ipranges/goog.json"
+    fetch_jq: ".prefixes[].ipv4Prefix"
+    refresh_interval: 24h
+
+  # Static IP list for internal or known services
+  internal-only:
+    cidrs:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+# Verifier definitions - typically one per business unit + provider
+# since each BU has their own signing secrets
+verifiers:
+  avvo-slack:
+    type: slack
+    signing_secret: "${AVVO_SLACK_SIGNING_SECRET}"
+    max_timestamp_age: 5m
+
+  avvo-gcal:
+    type: api_key
+    header: "X-Goog-Channel-Token"
+    token: "${AVVO_GCAL_CHANNEL_TOKEN}"
+
+  nolo-slack:
+    type: slack
+    signing_secret: "${NOLO_SLACK_SIGNING_SECRET}"
+    max_timestamp_age: 5m
+
+  martindale-github:
+    type: github
+    secret: "${MARTINDALE_GITHUB_WEBHOOK_SECRET}"
+
+  # Shared noop verifier for testing/development
+  none:
+    type: noop
+
+# Proxy routes - each hostname is explicitly enumerated
+# ACME certs are obtained automatically for each hostname when using -tls flag
+routes:
+  # Avvo Slack webhooks
+  - hostname: slack-webhooks.testing.avvo.tech
+    path: /events
+    ip_allowlist: aws
+    verifier: avvo-slack
+    destination: http://10.1.1.50:8080/webhooks/slack
+
+  # Avvo Google Calendar
+  - hostname: gcal-webhooks.testing.avvo.tech
+    path: /notify
+    ip_allowlist: google
+    verifier: avvo-gcal
+    destination: http://10.1.1.50:8080/webhooks/gcal
+
+  # Nolo Slack webhooks (*.example.com format)
+  - hostname: nolo-slack-webhooks.example.com
+    path: /events
+    ip_allowlist: aws
+    verifier: nolo-slack
+    destination: http://10.1.2.100:3000/api/slack
+
+  # Martindale GitHub webhooks (*.example.com format)
+  - hostname: martindale-github-webhooks.example.com
+    path: /hooks
+    ip_allowlist: internal-only
+    verifier: martindale-github
+    destination: http://10.1.3.50:8000/hooks/github
+
+  # Relay route example - for private networks that can't accept inbound connections.
+  # The relay_token replaces destination. A relay client (gatekeeper-relay) inside
+  # the private network connects outbound and polls for webhooks with this token.
+  # Uncomment and set RELAY_TOKEN_NOLO_SLACK env var to enable.
+  #
+  # - hostname: relay-webhooks.example.com
+  #   path: /events
+  #   ip_allowlist: aws
+  #   verifier: nolo-slack
+  #   relay_token: "${RELAY_TOKEN_NOLO_SLACK}"

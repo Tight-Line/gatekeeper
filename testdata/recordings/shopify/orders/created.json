@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "provider": "shopify",
+    "event_type": "orders/create",
+    "description": "Order created webhook from Shopify"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/webhooks/shopify",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Shopify-Topic": "orders/create",
+      "X-Shopify-Shop-Domain": "example-store.myshopify.com",
+      "X-Shopify-API-Version": "2024-01",
+      "X-Shopify-Hmac-SHA256": "test-signature-placeholder"
+    },
+    "body": {
+      "id": 820982911946154500,
+      "email": "customer@example.com",
+      "created_at": "2024-01-15T10:30:00-05:00",
+      "updated_at": "2024-01-15T10:30:00-05:00",
+      "number": 1001,
+      "note": null,
+      "token": "ORDER_TOKEN",
+      "total_price": "99.99",
+      "subtotal_price": "89.99",
+      "total_tax": "10.00",
+      "currency": "USD",
+      "financial_status": "paid",
+      "fulfillment_status": null,
+      "line_items": [
+        {
+          "id": 866550311766439000,
+          "title": "Example Product",
+          "quantity": 1,
+          "price": "89.99"
+        }
+      ],
+      "shipping_address": {
+        "first_name": "John",
+        "last_name": "Doe",
+        "address1": "123 Main St",
+        "city": "Anytown",
+        "province": "CA",
+        "country": "US",
+        "zip": "90210"
+      }
+    }
+  },
+  "signing_secret": "test-shopify-secret"
+}

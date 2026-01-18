@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gatekeeperd.fullname" . }}
+  labels:
+    {{- include "gatekeeperd.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "gatekeeperd.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "gatekeeperd.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            {{- if .Values.tls.enabled }}
+            - "-tls"
+            {{- end }}
+          env:
+            - name: GATEKEEPERD_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "gatekeeperd.fullname" . }}-config
+                  key: config.yaml
+            - name: GATEKEEPERD_TRUST_X_FORWARDED_FOR
+              value: {{ or .Values.trustXForwardedFor .Values.ingress.enabled | quote }}
+          ports:
+            {{- if .Values.tls.enabled }}
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            {{- else }}
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "gatekeeperd.secretName" . }}
+          {{- if and .Values.tls.enabled .Values.persistence.enabled }}
+          volumeMounts:
+            - name: acme-cache
+              mountPath: {{ .Values.tls.cacheDir }}
+          {{- end }}
+          {{- if .Values.metrics.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if and .Values.tls.enabled .Values.persistence.enabled }}
+      volumes:
+        - name: acme-cache
+          persistentVolumeClaim:
+            claimName: {{ include "gatekeeperd.fullname" . }}-acme-cache
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

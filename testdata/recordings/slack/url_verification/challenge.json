@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "provider": "slack",
+    "event_type": "url_verification",
+    "description": "URL verification challenge from Slack when setting up Events API"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/webhooks/slack",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Slack-Request-Timestamp": "1234567890",
+      "X-Slack-Signature": "v0=test-signature-placeholder"
+    },
+    "body": {
+      "token": "REDACTED",
+      "challenge": "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P",
+      "type": "url_verification"
+    }
+  },
+  "signing_secret": "test-signing-secret"
+}

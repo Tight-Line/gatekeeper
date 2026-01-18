@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slack/event_callback",
+  "title": "Slack Event Callback",
+  "description": "Schema for Slack Events API event_callback payloads",
+  "type": "object",
+  "required": ["type", "event"],
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "Deprecated verification token"
+    },
+    "team_id": {
+      "type": "string",
+      "pattern": "^T[A-Z0-9]+$",
+      "description": "Workspace ID"
+    },
+    "api_app_id": {
+      "type": "string",
+      "pattern": "^A[A-Z0-9]+$",
+      "description": "App ID"
+    },
+    "type": {
+      "type": "string",
+      "const": "event_callback",
+      "description": "Must be event_callback for event payloads"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^Ev[A-Z0-9]+$",
+      "description": "Unique event ID"
+    },
+    "event_time": {
+      "type": "integer",
+      "description": "Unix timestamp of the event"
+    },
+    "event": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Event type (e.g., message, reaction_added)"
+        }
+      },
+      "description": "The actual event data"
+    },
+    "authorizations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Authorization information"
+    }
+  }
+}
