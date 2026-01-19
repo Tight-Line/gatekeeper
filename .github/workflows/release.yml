@@ -7,7 +7,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ toLower(github.repository_owner) }}
 
 jobs:
   docker:
@@ -29,9 +28,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Extract metadata
+        id: meta
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
 
       - name: Build and push gatekeeperd
         uses: docker/build-push-action@v5
@@ -40,8 +41,8 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/gatekeeperd:${{ steps.version.outputs.VERSION }}
-            ${{ env.IMAGE_PREFIX }}/gatekeeperd:latest
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:${{ steps.meta.outputs.VERSION }}
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:latest
           platforms: linux/amd64,linux/arm64
 
       - name: Build and push gatekeeper-relay
@@ -51,8 +52,8 @@ jobs:
           file: ./Dockerfile.relay
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/gatekeeper-relay:${{ steps.version.outputs.VERSION }}
-            ${{ env.IMAGE_PREFIX }}/gatekeeper-relay:latest
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:${{ steps.meta.outputs.VERSION }}
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:latest
           platforms: linux/amd64,linux/arm64
 
   helm:

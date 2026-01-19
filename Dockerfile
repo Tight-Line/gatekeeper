@@ -24,11 +24,9 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/gatekeeperd .
 
-# Allow binding to privileged ports (80, 443) without root
-RUN setcap cap_net_bind_service=+ep ./gatekeeperd
-
-# Create non-root user
-RUN addgroup -g 1000 gatekeeper && \
+# Allow binding to privileged ports and create non-root user
+RUN setcap cap_net_bind_service=+ep ./gatekeeperd && \
+    addgroup -g 1000 gatekeeper && \
     adduser -u 1000 -G gatekeeper -s /bin/sh -D gatekeeper && \
     mkdir -p /etc/gatekeeper /var/cache/gatekeeper && \
     chown -R gatekeeper:gatekeeper /app /etc/gatekeeper /var/cache/gatekeeper
