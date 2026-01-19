@@ -171,7 +171,7 @@ func TestForwarder_Forward_InvalidMethod(t *testing.T) {
 // errorReader is a reader that always returns an error
 type errorReader struct{}
 
-func (e *errorReader) Read(p []byte) (n int, err error) {
+func (e *errorReader) Read(_ []byte) (n int, err error) {
 	return 0, errors.New("simulated read error")
 }
 
@@ -182,7 +182,7 @@ func (e *errorReader) Close() error {
 // errorTransport is an http.RoundTripper that returns a response with a body that errors on read
 type errorTransport struct{}
 
-func (t *errorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *errorTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       &errorReader{},

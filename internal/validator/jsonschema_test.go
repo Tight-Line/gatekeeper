@@ -162,7 +162,7 @@ func TestNewJSONSchemaValidatorFromFile(t *testing.T) {
 		t.Errorf("valid payload failed: %v", err)
 	}
 
-	if err := v.Validate([]byte(`{}`)); err == nil {
+	if v.Validate([]byte(`{}`)) == nil {
 		t.Error("invalid payload should have failed")
 	}
 }

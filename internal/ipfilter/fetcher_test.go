@@ -21,7 +21,7 @@ type errorReadCloser struct {
 	err error
 }
 
-func (e errorReadCloser) Read(p []byte) (int, error) {
+func (e errorReadCloser) Read(_ []byte) (int, error) {
 	return 0, e.err
 }
 
@@ -219,6 +219,7 @@ func TestFetcher_HandlesFetchError(t *testing.T) {
 }
 
 func TestFetcher_Stop(t *testing.T) {
+	t.Helper()
 	filters := NewFilterSet()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	fetcher := NewFetcher(filters, logger)
@@ -226,13 +227,12 @@ func TestFetcher_Stop(t *testing.T) {
 	ctx := context.Background()
 	fetcher.Start(ctx)
 
-	// Call Stop to cancel the context
+	// Call Stop to cancel the context - no panic means success
 	fetcher.Stop()
-
-	// No panic or error means success
 }
 
 func TestFetcher_StopWithoutStart(t *testing.T) {
+	t.Helper()
 	filters := NewFilterSet()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	fetcher := NewFetcher(filters, logger)
@@ -396,6 +396,7 @@ func TestFetcher_InvalidURL(t *testing.T) {
 }
 
 func TestFetcher_ReadBodyError(t *testing.T) {
+	t.Helper()
 	// Server returns a response where reading the body will fail
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "1000") // Claim big body

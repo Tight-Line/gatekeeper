@@ -22,7 +22,7 @@ func NewAPIKeyVerifier(header, token string) *APIKeyVerifier {
 }
 
 // Verify checks that the header value matches the expected token
-func (v *APIKeyVerifier) Verify(r *http.Request, payload []byte) error {
+func (v *APIKeyVerifier) Verify(r *http.Request, _ []byte) error {
 	value := r.Header.Get(v.header)
 	if value == "" {
 		return fmt.Errorf("%w: %s header missing", ErrSignatureEmpty, v.header)

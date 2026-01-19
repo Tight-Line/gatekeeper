@@ -33,43 +33,43 @@ func TestHandler(t *testing.T) {
 }
 
 func TestRecordRequest(t *testing.T) {
-	// Just test that it doesn't panic
+	t.Helper()
 	RecordRequest("example.com", "/webhook", "200", 0.5)
 	RecordRequest("example.com", "/webhook", "500", 1.2)
 }
 
 func TestRecordVerificationFailure(t *testing.T) {
-	// Just test that it doesn't panic
+	t.Helper()
 	RecordVerificationFailure("example.com", "hmac", "invalid_signature")
 	RecordVerificationFailure("example.com", "basic", "missing_header")
 }
 
 func TestRecordIPDenied(t *testing.T) {
-	// Just test that it doesn't panic
+	t.Helper()
 	RecordIPDenied("example.com", "github")
 	RecordIPDenied("example.com", "slack")
 }
 
 func TestRecordIPRangesLoaded(t *testing.T) {
-	// Just test that it doesn't panic
+	t.Helper()
 	RecordIPRangesLoaded("github", 100)
 	RecordIPRangesLoaded("slack", 50)
 }
 
 func TestRecordIPRangeFetchError(t *testing.T) {
-	// Just test that it doesn't panic
+	t.Helper()
 	RecordIPRangeFetchError("github")
 	RecordIPRangeFetchError("slack")
 }
 
 func TestRecordForwardError(t *testing.T) {
-	// Just test that it doesn't panic
+	t.Helper()
 	RecordForwardError("example.com", "http://localhost:8080")
 	RecordForwardError("example.com", "http://localhost:8081")
 }
 
 func TestRecordValidationFailure(t *testing.T) {
-	// Just test that it doesn't panic
+	t.Helper()
 	RecordValidationFailure("example.com", "json-schema")
 	RecordValidationFailure("example.com", "custom-validator")
 }

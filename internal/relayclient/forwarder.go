@@ -45,74 +45,15 @@ func NewForwarder(destination, channelName string, logger *slog.Logger) *Forward
 
 // Forward delivers a webhook to the local destination and returns the response
 func (f *Forwarder) Forward(ctx context.Context, webhook *Webhook) (*Response, error) {
-	// Decode body from base64
 	body, err := base64.StdEncoding.DecodeString(webhook.Body)
 	if err != nil {
 		return nil, fmt.Errorf("decoding body: %w", err)
 	}
 
-	// Build the full destination URL
-	// The destination is a base URL (e.g., http://localhost:8080 or http://localhost:8080/api)
-	// The webhook.Path contains the original request URI including query string
-	destURL, err := url.Parse(f.destination)
+	req, err := f.buildRequest(ctx, webhook, body)
 	if err != nil {
-		return nil, fmt.Errorf("parsing destination: %w", err)
+		return nil, err
 	}
-
-	// Parse webhook path to extract path and query separately
-	webhookURL, err := url.Parse(webhook.Path)
-	if err != nil {
-		return nil, fmt.Errorf("parsing webhook path: %w", err)
-	}
-
-	// Combine: destination base path + webhook path
-	// e.g., destination=/api?token=x, webhook=/hooks/github?y=1 -> /api/hooks/github?token=x&y=1
-	basePath := strings.TrimSuffix(destURL.Path, "/")
-	destURL.Path = basePath + webhookURL.Path
-
-	// Merge query params: preserve destination params and add webhook params
-	if destURL.RawQuery != "" && webhookURL.RawQuery != "" {
-		destURL.RawQuery = destURL.RawQuery + "&" + webhookURL.RawQuery
-	} else if webhookURL.RawQuery != "" {
-		destURL.RawQuery = webhookURL.RawQuery
-	}
-	// If only destination has query params, they're already in destURL.RawQuery
-
-	// Create request to the combined URL
-	req, err := http.NewRequestWithContext(ctx, webhook.Method, destURL.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-
-	// Copy original headers, skipping hop-by-hop headers that are connection-specific
-	// Note: Content-Length is also skipped - it will be set correctly by the HTTP client
-	// based on the actual body length
-	for k, values := range webhook.Headers {
-		if httputil.ShouldStrip(k) {
-			continue
-		}
-		for _, v := range values {
-			req.Header.Add(k, v)
-		}
-	}
-
-	// Handle Host header preservation from gatekeeperd
-	// If X-Gatekeeperd-Preserve-Host is "true", use the original host from X-Gatekeeperd-Original-Host
-	if req.Header.Get("X-Gatekeeperd-Preserve-Host") == "true" {
-		if originalHost := req.Header.Get("X-Gatekeeperd-Original-Host"); originalHost != "" {
-			req.Host = originalHost
-		}
-	}
-	// Remove internal gatekeeperd headers - they shouldn't be forwarded to destination
-	req.Header.Del("X-Gatekeeperd-Preserve-Host")
-	req.Header.Del("X-Gatekeeperd-Original-Host")
-
-	// Add relay metadata headers
-	req.Header.Set("X-Relay-Webhook-ID", webhook.ID)
-	req.Header.Set("X-Relay-Original-Path", webhook.Path)
-
-	// Ensure connection is not kept alive - each request is independent
-	req.Header.Set("Connection", "close")
 
 	start := time.Now()
 	resp, err := f.client.Do(req)
@@ -130,7 +71,71 @@ func (f *Forwarder) Forward(ctx context.Context, webhook *Webhook) (*Response, e
 	}
 	defer resp.Body.Close()
 
-	// Read response body
+	return f.buildResponse(webhook, resp, duration)
+}
+
+func (f *Forwarder) buildRequest(ctx context.Context, webhook *Webhook, body []byte) (*http.Request, error) {
+	destURL, err := f.buildDestinationURL(webhook.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, webhook.Method, destURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	f.copyHeaders(req, webhook)
+	return req, nil
+}
+
+func (f *Forwarder) buildDestinationURL(webhookPath string) (string, error) {
+	destURL, err := url.Parse(f.destination)
+	if err != nil {
+		return "", fmt.Errorf("parsing destination: %w", err)
+	}
+
+	webhookURL, err := url.Parse(webhookPath)
+	if err != nil {
+		return "", fmt.Errorf("parsing webhook path: %w", err)
+	}
+
+	basePath := strings.TrimSuffix(destURL.Path, "/")
+	destURL.Path = basePath + webhookURL.Path
+
+	if destURL.RawQuery != "" && webhookURL.RawQuery != "" {
+		destURL.RawQuery = destURL.RawQuery + "&" + webhookURL.RawQuery
+	} else if webhookURL.RawQuery != "" {
+		destURL.RawQuery = webhookURL.RawQuery
+	}
+
+	return destURL.String(), nil
+}
+
+func (f *Forwarder) copyHeaders(req *http.Request, webhook *Webhook) {
+	for k, values := range webhook.Headers {
+		if httputil.ShouldStrip(k) {
+			continue
+		}
+		for _, v := range values {
+			req.Header.Add(k, v)
+		}
+	}
+
+	if req.Header.Get("X-Gatekeeperd-Preserve-Host") == "true" {
+		if originalHost := req.Header.Get("X-Gatekeeperd-Original-Host"); originalHost != "" {
+			req.Host = originalHost
+		}
+	}
+	req.Header.Del("X-Gatekeeperd-Preserve-Host")
+	req.Header.Del("X-Gatekeeperd-Original-Host")
+
+	req.Header.Set("X-Relay-Webhook-ID", webhook.ID)
+	req.Header.Set("X-Relay-Original-Path", webhook.Path)
+	req.Header.Set("Connection", "close")
+}
+
+func (f *Forwarder) buildResponse(webhook *Webhook, resp *http.Response, duration time.Duration) (*Response, error) {
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		f.logger.Error("failed to read response body",
@@ -141,8 +146,6 @@ func (f *Forwarder) Forward(ctx context.Context, webhook *Webhook) (*Response, e
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	// Capture response headers, stripping hop-by-hop headers
-	// These are connection-specific and must not be forwarded back through the relay
 	respHeaders := httputil.StripHopByHopHeaders(resp.Header)
 
 	f.logger.Info("webhook forwarded",

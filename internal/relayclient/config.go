@@ -100,14 +100,23 @@ func (c *Config) GetMaxConsecutiveFailures() int {
 
 // Validate checks the configuration for errors
 func (c *Config) Validate() error {
+	if err := c.validateServer(); err != nil {
+		return err
+	}
+	return c.validateChannels()
+}
+
+func (c *Config) validateServer() error {
 	if c.Server == "" {
 		return fmt.Errorf("server is required")
 	}
-
 	if !strings.HasPrefix(c.Server, "http://") && !strings.HasPrefix(c.Server, "https://") {
 		return fmt.Errorf("server must start with http:// or https://")
 	}
+	return nil
+}
 
+func (c *Config) validateChannels() error {
 	if len(c.Channels) == 0 {
 		return fmt.Errorf("at least one channel is required")
 	}
@@ -116,30 +125,33 @@ func (c *Config) Validate() error {
 	tokens := make(map[string]bool)
 
 	for i, ch := range c.Channels {
-		if ch.Name == "" {
-			return fmt.Errorf("channel %d: name is required", i)
+		if err := validateChannel(i, &ch, names, tokens); err != nil {
+			return err
 		}
-		if ch.Token == "" {
-			return fmt.Errorf("channel %q: token is required", ch.Name)
-		}
-		if ch.Destination == "" {
-			return fmt.Errorf("channel %q: destination is required", ch.Name)
-		}
-
-		if !strings.HasPrefix(ch.Destination, "http://") && !strings.HasPrefix(ch.Destination, "https://") {
-			return fmt.Errorf("channel %q: destination must start with http:// or https://", ch.Name)
-		}
-
-		if names[ch.Name] {
-			return fmt.Errorf("duplicate channel name: %q", ch.Name)
-		}
-		names[ch.Name] = true
-
-		if tokens[ch.Token] {
-			return fmt.Errorf("duplicate token in channel %q", ch.Name)
-		}
-		tokens[ch.Token] = true
 	}
+	return nil
+}
 
+func validateChannel(index int, ch *ChannelConfig, names, tokens map[string]bool) error {
+	if ch.Name == "" {
+		return fmt.Errorf("channel %d: name is required", index)
+	}
+	if ch.Token == "" {
+		return fmt.Errorf("channel %q: token is required", ch.Name)
+	}
+	if ch.Destination == "" {
+		return fmt.Errorf("channel %q: destination is required", ch.Name)
+	}
+	if !strings.HasPrefix(ch.Destination, "http://") && !strings.HasPrefix(ch.Destination, "https://") {
+		return fmt.Errorf("channel %q: destination must start with http:// or https://", ch.Name)
+	}
+	if names[ch.Name] {
+		return fmt.Errorf("duplicate channel name: %q", ch.Name)
+	}
+	names[ch.Name] = true
+	if tokens[ch.Token] {
+		return fmt.Errorf("duplicate token in channel %q", ch.Name)
+	}
+	tokens[ch.Token] = true
 	return nil
 }

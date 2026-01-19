@@ -23,6 +23,8 @@ import (
 	"github.com/tight-line/gatekeeper/internal/verifier"
 )
 
+const errInternalServerError = "Internal Server Error"
+
 // HandlerOptions configures the proxy handler
 type HandlerOptions struct {
 	// TrustXForwardedFor controls whether the handler trusts the X-Forwarded-For
@@ -136,208 +138,259 @@ func buildValidator(vc config.ValidatorConfig) (validator.Validator, error) {
 	}
 }
 
+// requestContext holds the state for processing a single request
+type requestContext struct {
+	hostname string
+	route    *config.RouteConfig
+	body     []byte
+	start    time.Time
+}
+
 // ServeHTTP handles incoming requests
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
+	ctx := &requestContext{start: time.Now()}
 
-	// Extract hostname (strip port if present)
-	// Use net.SplitHostPort to correctly handle IPv6 addresses like [::1]:8080
-	hostname := r.Host
-	if host, _, err := net.SplitHostPort(hostname); err == nil {
-		hostname = host
+	ctx.hostname = r.Host
+	if host, _, err := net.SplitHostPort(ctx.hostname); err == nil {
+		ctx.hostname = host
 	}
 
-	// Find matching route
-	route := h.findRoute(hostname, r.URL.Path)
-	if route == nil {
-		h.logger.Warn("no matching route",
-			"hostname", hostname,
-			"path", r.URL.Path,
-			"remote_addr", r.RemoteAddr,
-		)
-		// Use static values to prevent unbounded metric cardinality from arbitrary Host headers and paths
-		metrics.RecordRequest("unknown", "unknown", "404", time.Since(start).Seconds())
-		http.Error(w, "Not Found", http.StatusNotFound)
+	ctx.route = h.findRoute(ctx.hostname, r.URL.Path)
+	if ctx.route == nil {
+		h.handleNotFound(w, r, ctx)
 		return
 	}
 
-	// Check IP allowlist
-	// getClientIP respects X-Forwarded-For only if trustXForwardedFor is enabled
-	if route.IPAllowlist != "" {
-		clientIP := h.getClientIP(r)
-		if !h.filters.Allow(route.IPAllowlist, clientIP) {
-			h.logger.Warn("ip not allowed",
-				"hostname", hostname,
-				"path", r.URL.Path,
-				"client_ip", clientIP,
-				"remote_addr", r.RemoteAddr,
-				"allowlist", route.IPAllowlist,
-			)
-			metrics.RecordIPDenied(hostname, route.IPAllowlist)
-			metrics.RecordRequest(hostname, route.Path, "403", time.Since(start).Seconds())
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
+	if !h.checkIPAllowlist(w, r, ctx) {
+		return
 	}
 
-	// Read body for verification (with size limit to prevent memory exhaustion)
-	// Read up to maxBodySize+1 to detect if the body exceeds the limit
+	var err error
+	ctx.body, err = h.readBody(w, r, ctx)
+	if err != nil {
+		return
+	}
+
+	if !h.verifyRequest(w, r, ctx) {
+		return
+	}
+
+	if !h.validatePayload(w, r, ctx) {
+		return
+	}
+
+	if ctx.route.RelayToken != "" {
+		h.handleRelay(w, r, ctx)
+	} else {
+		h.handleForward(w, r, ctx)
+	}
+}
+
+func (h *Handler) handleNotFound(w http.ResponseWriter, r *http.Request, ctx *requestContext) {
+	h.logger.Warn("no matching route",
+		"hostname", ctx.hostname,
+		"path", r.URL.Path,
+		"remote_addr", r.RemoteAddr,
+	)
+	metrics.RecordRequest("unknown", "unknown", "404", time.Since(ctx.start).Seconds())
+	http.Error(w, "Not Found", http.StatusNotFound)
+}
+
+func (h *Handler) checkIPAllowlist(w http.ResponseWriter, r *http.Request, ctx *requestContext) bool {
+	if ctx.route.IPAllowlist == "" {
+		return true
+	}
+
+	clientIP := h.getClientIP(r)
+	if h.filters.Allow(ctx.route.IPAllowlist, clientIP) {
+		return true
+	}
+
+	h.logger.Warn("ip not allowed",
+		"hostname", ctx.hostname,
+		"path", r.URL.Path,
+		"client_ip", clientIP,
+		"remote_addr", r.RemoteAddr,
+		"allowlist", ctx.route.IPAllowlist,
+	)
+	metrics.RecordIPDenied(ctx.hostname, ctx.route.IPAllowlist)
+	metrics.RecordRequest(ctx.hostname, ctx.route.Path, "403", time.Since(ctx.start).Seconds())
+	http.Error(w, "Forbidden", http.StatusForbidden)
+	return false
+}
+
+func (h *Handler) readBody(w http.ResponseWriter, r *http.Request, ctx *requestContext) ([]byte, error) {
 	limitedReader := io.LimitReader(r.Body, h.maxBodySize+1)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
 		h.logger.Error("failed to read body",
-			"hostname", hostname,
+			"hostname", ctx.hostname,
 			"path", r.URL.Path,
 			"error", err,
 		)
-		metrics.RecordRequest(hostname, route.Path, "400", time.Since(start).Seconds())
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "400", time.Since(ctx.start).Seconds())
 		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
+		return nil, err
 	}
+
 	if int64(len(body)) > h.maxBodySize {
 		h.logger.Warn("request body too large",
-			"hostname", hostname,
+			"hostname", ctx.hostname,
 			"path", r.URL.Path,
 			"remote_addr", r.RemoteAddr,
 			"max_size", h.maxBodySize,
 		)
-		metrics.RecordRequest(hostname, route.Path, "413", time.Since(start).Seconds())
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "413", time.Since(ctx.start).Seconds())
 		http.Error(w, "Request Entity Too Large", http.StatusRequestEntityTooLarge)
-		return
+		return nil, errors.New("body too large")
 	}
+
 	r.Body = io.NopCloser(bytes.NewReader(body))
+	return body, nil
+}
 
-	// Verify signature
-	if route.Verifier != "" {
-		v, ok := h.verifiers[route.Verifier]
-		if !ok {
-			h.logger.Error("verifier not found",
-				"hostname", hostname,
-				"path", r.URL.Path,
-				"verifier", route.Verifier,
-			)
-			metrics.RecordRequest(hostname, route.Path, "500", time.Since(start).Seconds())
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		if err := v.Verify(r, body); err != nil {
-			h.logger.Warn("verification failed",
-				"hostname", hostname,
-				"path", r.URL.Path,
-				"remote_addr", r.RemoteAddr,
-				"verifier", route.Verifier,
-				"error", err.Error(),
-			)
-			metrics.RecordVerificationFailure(hostname, route.Verifier, categorizeVerificationError(err))
-			metrics.RecordRequest(hostname, route.Path, "401", time.Since(start).Seconds())
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+func (h *Handler) verifyRequest(w http.ResponseWriter, r *http.Request, ctx *requestContext) bool {
+	if ctx.route.Verifier == "" {
+		return true
 	}
 
-	// Validate payload structure
-	if route.Validator != "" {
-		val, ok := h.validators[route.Validator]
-		if !ok {
-			h.logger.Error("validator not found",
-				"hostname", hostname,
-				"path", r.URL.Path,
-				"validator", route.Validator,
-			)
-			metrics.RecordRequest(hostname, route.Path, "500", time.Since(start).Seconds())
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		if err := val.Validate(body); err != nil {
-			h.logger.Warn("validation failed",
-				"hostname", hostname,
-				"path", r.URL.Path,
-				"remote_addr", r.RemoteAddr,
-				"validator", route.Validator,
-				"error", err.Error(),
-			)
-			metrics.RecordValidationFailure(hostname, route.Validator)
-			metrics.RecordRequest(hostname, route.Path, "400", time.Since(start).Seconds())
-			http.Error(w, "Bad Request", http.StatusBadRequest)
-			return
-		}
+	v, ok := h.verifiers[ctx.route.Verifier]
+	if !ok {
+		h.logger.Error("verifier not found",
+			"hostname", ctx.hostname,
+			"path", r.URL.Path,
+			"verifier", ctx.route.Verifier,
+		)
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "500", time.Since(ctx.start).Seconds())
+		http.Error(w, errInternalServerError, http.StatusInternalServerError)
+		return false
 	}
 
-	// Deliver via relay or forward directly
-	if route.RelayToken != "" {
-		if h.relay == nil {
-			h.logger.Error("relay manager not configured",
-				"hostname", hostname,
-				"path", r.URL.Path,
-			)
-			metrics.RecordRequest(hostname, route.Path, "500", time.Since(start).Seconds())
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		// Deliver and wait for response from relay client
-		resp, err := h.relay.DeliverHTTPRequest(r.Context(), route.RelayToken, r, body, route.PreserveHost)
-		if err != nil {
-			if err == relay.ErrNoClient {
-				h.logger.Warn("no relay client connected",
-					"hostname", hostname,
-					"path", r.URL.Path,
-					"remote_addr", r.RemoteAddr,
-				)
-				metrics.RecordRequest(hostname, route.Path, "503", time.Since(start).Seconds())
-				http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
-				return
-			}
-			h.logger.Error("relay delivery failed",
-				"hostname", hostname,
-				"path", r.URL.Path,
-				"error", err,
-			)
-			metrics.RecordRequest(hostname, route.Path, "502", time.Since(start).Seconds())
-			http.Error(w, "Bad Gateway", http.StatusBadGateway)
-			return
-		}
-
-		// Write the relayed response back to the original caller
-		h.writeRelayResponse(w, resp)
-		statusStr := fmt.Sprintf("%d", resp.StatusCode)
-		metrics.RecordRequest(hostname, route.Path, statusStr, time.Since(start).Seconds())
-		h.logger.Info("request relayed",
-			"hostname", hostname,
+	if err := v.Verify(r, ctx.body); err != nil {
+		h.logger.Warn("verification failed",
+			"hostname", ctx.hostname,
 			"path", r.URL.Path,
 			"remote_addr", r.RemoteAddr,
-			"status", resp.StatusCode,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"verifier", ctx.route.Verifier,
+			"error", err.Error(),
 		)
+		metrics.RecordVerificationFailure(ctx.hostname, ctx.route.Verifier, categorizeVerificationError(err))
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "401", time.Since(ctx.start).Seconds())
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return false
+	}
+
+	return true
+}
+
+func (h *Handler) validatePayload(w http.ResponseWriter, r *http.Request, ctx *requestContext) bool {
+	if ctx.route.Validator == "" {
+		return true
+	}
+
+	val, ok := h.validators[ctx.route.Validator]
+	if !ok {
+		h.logger.Error("validator not found",
+			"hostname", ctx.hostname,
+			"path", r.URL.Path,
+			"validator", ctx.route.Validator,
+		)
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "500", time.Since(ctx.start).Seconds())
+		http.Error(w, errInternalServerError, http.StatusInternalServerError)
+		return false
+	}
+
+	if err := val.Validate(ctx.body); err != nil {
+		h.logger.Warn("validation failed",
+			"hostname", ctx.hostname,
+			"path", r.URL.Path,
+			"remote_addr", r.RemoteAddr,
+			"validator", ctx.route.Validator,
+			"error", err.Error(),
+		)
+		metrics.RecordValidationFailure(ctx.hostname, ctx.route.Validator)
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "400", time.Since(ctx.start).Seconds())
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return false
+	}
+
+	return true
+}
+
+func (h *Handler) handleRelay(w http.ResponseWriter, r *http.Request, ctx *requestContext) {
+	if h.relay == nil {
+		h.logger.Error("relay manager not configured",
+			"hostname", ctx.hostname,
+			"path", r.URL.Path,
+		)
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "500", time.Since(ctx.start).Seconds())
+		http.Error(w, errInternalServerError, http.StatusInternalServerError)
 		return
 	}
 
-	// Forward the request directly
-	status, err := h.forward(w, r, route, body)
+	resp, err := h.relay.DeliverHTTPRequest(r.Context(), ctx.route.RelayToken, r, ctx.body, ctx.route.PreserveHost)
+	if err != nil {
+		h.handleRelayError(w, r, ctx, err)
+		return
+	}
+
+	h.writeRelayResponse(w, resp)
+	statusStr := fmt.Sprintf("%d", resp.StatusCode)
+	metrics.RecordRequest(ctx.hostname, ctx.route.Path, statusStr, time.Since(ctx.start).Seconds())
+	h.logger.Info("request relayed",
+		"hostname", ctx.hostname,
+		"path", r.URL.Path,
+		"remote_addr", r.RemoteAddr,
+		"status", resp.StatusCode,
+		"duration_ms", time.Since(ctx.start).Milliseconds(),
+	)
+}
+
+func (h *Handler) handleRelayError(w http.ResponseWriter, r *http.Request, ctx *requestContext, err error) {
+	if err == relay.ErrNoClient {
+		h.logger.Warn("no relay client connected",
+			"hostname", ctx.hostname,
+			"path", r.URL.Path,
+			"remote_addr", r.RemoteAddr,
+		)
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "503", time.Since(ctx.start).Seconds())
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	h.logger.Error("relay delivery failed",
+		"hostname", ctx.hostname,
+		"path", r.URL.Path,
+		"error", err,
+	)
+	metrics.RecordRequest(ctx.hostname, ctx.route.Path, "502", time.Since(ctx.start).Seconds())
+	http.Error(w, "Bad Gateway", http.StatusBadGateway)
+}
+
+func (h *Handler) handleForward(w http.ResponseWriter, r *http.Request, ctx *requestContext) {
+	status, err := h.forward(w, r, ctx.route, ctx.body)
 	if err != nil {
 		h.logger.Error("forward failed",
-			"hostname", hostname,
+			"hostname", ctx.hostname,
 			"path", r.URL.Path,
-			"destination", route.Destination,
+			"destination", ctx.route.Destination,
 			"error", err,
 		)
-		metrics.RecordForwardError(hostname, route.Destination)
-		metrics.RecordRequest(hostname, route.Path, "502", time.Since(start).Seconds())
+		metrics.RecordForwardError(ctx.hostname, ctx.route.Destination)
+		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "502", time.Since(ctx.start).Seconds())
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
 	}
 
 	statusStr := fmt.Sprintf("%d", status)
-	metrics.RecordRequest(hostname, route.Path, statusStr, time.Since(start).Seconds())
+	metrics.RecordRequest(ctx.hostname, ctx.route.Path, statusStr, time.Since(ctx.start).Seconds())
 	h.logger.Info("request forwarded",
-		"hostname", hostname,
+		"hostname", ctx.hostname,
 		"path", r.URL.Path,
 		"remote_addr", r.RemoteAddr,
-		"destination", route.Destination,
+		"destination", ctx.route.Destination,
 		"status", status,
-		"duration_ms", time.Since(start).Milliseconds(),
+		"duration_ms", time.Since(ctx.start).Milliseconds(),
 	)
 }
 

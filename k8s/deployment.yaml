@@ -17,7 +17,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: gatekeeper
-          image: gatekeeper:latest
+          image: gatekeeper:v0.1.0  # Update to your desired version
           args:
             - "-config=/etc/gatekeeper/config.yaml"
             - "-tls"

@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const slackTimestampHeader = "X-Slack-Request-Timestamp"
+
 // Recording represents a captured webhook request for testing.
 type Recording struct {
 	Metadata RecordingMetadata `json:"metadata"`
@@ -223,8 +225,8 @@ func (r *Recording) ExpireTimestamp(age time.Duration) *Recording {
 	expiredTime := time.Now().Add(-age)
 
 	// Slack uses Unix timestamp
-	if _, exists := clone.Request.Headers["X-Slack-Request-Timestamp"]; exists {
-		clone.Request.Headers["X-Slack-Request-Timestamp"] = fmt.Sprintf("%d", expiredTime.Unix())
+	if _, exists := clone.Request.Headers[slackTimestampHeader]; exists {
+		clone.Request.Headers[slackTimestampHeader] = fmt.Sprintf("%d", expiredTime.Unix())
 	}
 
 	return clone
@@ -238,8 +240,8 @@ func (r *Recording) FutureTimestamp(offset time.Duration) *Recording {
 	futureTime := time.Now().Add(offset)
 
 	// Slack uses Unix timestamp
-	if _, exists := clone.Request.Headers["X-Slack-Request-Timestamp"]; exists {
-		clone.Request.Headers["X-Slack-Request-Timestamp"] = fmt.Sprintf("%d", futureTime.Unix())
+	if _, exists := clone.Request.Headers[slackTimestampHeader]; exists {
+		clone.Request.Headers[slackTimestampHeader] = fmt.Sprintf("%d", futureTime.Unix())
 	}
 
 	return clone
