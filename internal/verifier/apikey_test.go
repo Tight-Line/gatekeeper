@@ -12,12 +12,7 @@ func TestAPIKeyVerifier_Verify(t *testing.T) {
 	token := "my-secret-channel-token"
 	verifier := NewAPIKeyVerifier(header, token)
 
-	tests := []struct {
-		name      string
-		setup     func() (*http.Request, []byte)
-		wantErr   bool
-		errString string
-	}{
+	tests := []verifierTestCase{
 		{
 			name: "valid token",
 			setup: func() (*http.Request, []byte) {
@@ -62,29 +57,10 @@ func TestAPIKeyVerifier_Verify(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req, body := tt.setup()
-			err := verifier.Verify(req, body)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errString != "" && !strings.Contains(err.Error(), tt.errString) {
-					t.Errorf("expected error containing %q, got %q", tt.errString, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-			}
-		})
-	}
+	runVerifierTests(t, verifier, tests)
 }
 
 func TestAPIKeyVerifier_Type(t *testing.T) {
 	v := NewAPIKeyVerifier("X-API-Key", "secret")
-	if v.Type() != "api_key" {
-		t.Errorf("expected type 'api_key', got %q", v.Type())
-	}
+	assertVerifierType(t, v, "api_key")
 }
