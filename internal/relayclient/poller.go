@@ -69,6 +69,7 @@ func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logge
 func (p *Poller) Run(ctx context.Context) error {
 	backoff := p.minBackoff
 	consecutiveFailures := 0
+	connected := false
 
 	for {
 		select {
@@ -86,6 +87,20 @@ func (p *Poller) Run(ctx context.Context) error {
 			continue
 		}
 
+		// Log connection status
+		if !connected {
+			p.logger.Info("connected to server",
+				"channel", p.channelName,
+			)
+			connected = true
+		} else if consecutiveFailures > 0 {
+			p.logger.Info("connection recovered",
+				"channel", p.channelName,
+				"previous_failures", consecutiveFailures,
+			)
+		}
+
+		// Reset backoff and failure count on successful connection
 		backoff = p.minBackoff
 		consecutiveFailures = 0
 
