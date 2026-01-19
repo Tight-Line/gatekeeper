@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+dist/
+*.exe
+
+# Test and coverage
+coverage.out
+*.test
+
+# Documentation (not needed in image)
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Development files
+.env
+.env.*
+*.local
+docker-compose*.yml
+
+# Kubernetes manifests (not needed in image)
+k8s/
+charts/
+
+# SonarCloud
+.scannerwork/
+sonar-project.properties
+
+# Misc
+.DS_Store
+Thumbs.db
