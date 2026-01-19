@@ -1,0 +1,63 @@
+# Helm values for gatekeeperd in minikube testing
+# Usage: helm install gatekeeperd ./charts/gatekeeperd -f config/minikube-gatekeeperd.yaml -n gatekeeper
+replicaCount: 1
+
+image:
+  repository: gatekeeperd
+  pullPolicy: Never  # Use local image only (no registry for dev images)
+  tag: "dev"
+
+# No TLS for local testing - container listens on port 8080
+tls:
+  enabled: false
+
+# Disable ingress - use NodePort to access directly
+ingress:
+  enabled: false
+
+service:
+  type: NodePort
+
+# Disable persistence for simple testing
+persistence:
+  enabled: false
+
+# Resource limits for local testing
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Allow all IPs for testing (no IP filtering)
+ipAllowlists:
+  allow-all:
+    cidrs:
+      - "0.0.0.0/0"
+
+# Noop verifier for testing (no signature verification)
+verifiers:
+  noop:
+    type: noop
+
+# Routes for testing both direct forwarding and relay delivery
+routes:
+  # Direct forwarding route - forwards directly to httpbin.org
+  - hostname: test.local
+    path: /webhook/direct
+    ipAllowlist: allow-all
+    verifier: noop
+    destination: https://httpbin.org/post
+
+  # Relay route - delivered via gatekeeper-relay client
+  - hostname: test.local
+    path: /webhook/relay
+    ipAllowlist: allow-all
+    verifier: noop
+    relayTokenKey: RELAY_TOKEN
+
+# Secrets for relay token (must match gatekeeper-relay config)
+secrets:
+  RELAY_TOKEN: "minikube-test-relay-token"

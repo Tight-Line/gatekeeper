@@ -209,31 +209,193 @@ This starts:
 - gatekeeper-relay connecting to the server
 - A mock backend for testing webhook delivery
 
-## Running in Kubernetes (minikube)
+## Testing with minikube
+
+This section provides a complete walkthrough for testing gatekeeperd and gatekeeper-relay in a local Kubernetes cluster using minikube. The setup includes both direct forwarding and relay delivery routes using httpbin.org as the destination.
+
+### Prerequisites
+
+- minikube installed and running
+- helm 3.x installed
+- kubectl configured for minikube
+
+### Step 1: Start minikube
 
 ```bash
-# Start minikube
 minikube start
-
-# Apply manifests
-kubectl apply -k k8s/
-
-# Get the service URL
-minikube service gatekeeperd --url
 ```
 
-For Helm-based deployment with relay:
+### Step 2: Build Images
+
+Build the Docker images using minikube's Docker daemon so they're available directly in the cluster:
 
 ```bash
-# Add any required secrets
-kubectl create secret generic gatekeeper-secrets \
-  --from-literal=relay-token=your-token
+# Configure shell to use minikube's Docker daemon
+eval $(minikube docker-env)
 
-# Install server
-helm install gatekeeperd ./charts/gatekeeperd -f your-values.yaml
+# Build both images with the "dev" tag
+docker build -t gatekeeperd:dev -f Dockerfile .
+docker build -t gatekeeper-relay:dev -f Dockerfile.relay .
 
-# Install relay client
-helm install gatekeeper-relay ./charts/gatekeeper-relay -f your-relay-values.yaml
+# Verify images are available
+docker images | grep -E "gatekeeperd|gatekeeper-relay"
+```
+
+### Step 3: Deploy Charts
+
+```bash
+# Deploy gatekeeperd (creates namespace if needed)
+helm upgrade --install gatekeeperd ./charts/gatekeeperd \
+  -f config/minikube-gatekeeperd.yaml \
+  --namespace gatekeeper --create-namespace
+
+# Deploy gatekeeper-relay
+helm upgrade --install gatekeeper-relay ./charts/gatekeeper-relay \
+  -f config/minikube-relay.yaml \
+  --namespace gatekeeper
+```
+
+**Rebuilding after code changes:** Kubernetes doesn't detect when a local image's content changes (only the tag matters to it). After rebuilding the `:dev` images (step 2), force minikube to use them by restarting the deployments:
+
+```bash
+kubectl rollout restart deployment gatekeeperd gatekeeper-relay -n gatekeeper
+```
+
+### Step 4: Verify Deployment
+
+```bash
+# Check pods are running
+kubectl get pods -n gatekeeper
+
+# Check gatekeeperd logs (should show "starting HTTP server")
+kubectl logs -l app.kubernetes.io/name=gatekeeperd -n gatekeeper
+
+# Check relay logs (should show "connected to server")
+kubectl logs -l app.kubernetes.io/name=gatekeeper-relay -n gatekeeper
+```
+
+Expected output:
+```
+# gatekeeperd logs
+{"level":"INFO","msg":"relay enabled","tokens":1}
+{"level":"INFO","msg":"starting HTTP server","addr":":8080"}
+{"level":"INFO","msg":"starting metrics server","addr":":9090"}
+
+# gatekeeper-relay logs
+{"level":"INFO","msg":"relay client running","channels":1}
+{"level":"INFO","msg":"starting poller","channel":"httpbin"}
+{"level":"INFO","msg":"connected to server","channel":"httpbin"}
+```
+
+### Step 5: Test Direct Forwarding
+
+The direct route (`/webhook/direct`) forwards requests directly to httpbin.org.
+
+First, get the service URL:
+
+```bash
+minikube service gatekeeperd -n gatekeeper --url
+```
+
+**macOS with Docker driver:** This command creates a tunnel and blocks. Run it in a separate terminal window - it will print a URL like `http://127.0.0.1:52741` and keep running. Leave that terminal open and set the URL in your main terminal:
+
+```bash
+GATEKEEPER_URL=http://127.0.0.1:52741  # use the URL from the tunnel terminal
+```
+
+**Other platforms:** The command returns immediately. You can use:
+
+```bash
+GATEKEEPER_URL=$(minikube service gatekeeperd -n gatekeeper --url)
+```
+
+Now send a test webhook:
+
+```bash
+curl -X POST "${GATEKEEPER_URL}/webhook/direct" \
+  -H "Host: test.local" \
+  -H "Content-Type: application/json" \
+  -d '{"test": "direct forwarding", "timestamp": "'$(date -Iseconds)'"}'
+```
+
+Expected response: httpbin.org echoes the request back, showing headers and body.
+
+### Step 6: Test Relay Delivery
+
+The relay route (`/webhook/relay`) queues the request for the relay client, which forwards it to httpbin.org:
+
+```bash
+# Send a test webhook via relay
+curl -X POST "${GATEKEEPER_URL}/webhook/relay" \
+  -H "Host: test.local" \
+  -H "Content-Type: application/json" \
+  -d '{"test": "relay delivery", "timestamp": "'$(date -Iseconds)'"}'
+```
+
+Expected response: Same as direct forwarding - httpbin.org echoes the request.
+
+Check relay logs to see the webhook being processed:
+
+```bash
+kubectl logs -l app.kubernetes.io/name=gatekeeper-relay -n gatekeeper --tail=5
+```
+
+### Step 7: Cleanup
+
+When finished testing, tear down the Helm releases and namespace:
+
+```bash
+# Uninstall releases (order matters - relay first, then server)
+helm uninstall gatekeeper-relay --namespace gatekeeper
+helm uninstall gatekeeperd --namespace gatekeeper
+
+# Delete namespace (removes any remaining resources)
+kubectl delete namespace gatekeeper
+
+# Reset Docker environment (optional, returns to host Docker)
+eval $(minikube docker-env -u)
+```
+
+### Configuration Files
+
+The minikube test configurations are in the `config/` directory:
+
+- `config/minikube-gatekeeperd.yaml` - Helm values for gatekeeperd
+- `config/minikube-relay.yaml` - Helm values for gatekeeper-relay
+
+Key settings:
+- `image.pullPolicy: Never` - Uses locally built images
+- `image.tag: "dev"` - Matches the tag used when building
+- `tls.enabled: false` - HTTP mode for simplicity
+- `service.type: NodePort` - Allows direct access via `minikube service`
+- Both configs share the same `RELAY_TOKEN` secret
+
+### Troubleshooting
+
+**Pod not starting / ImagePullBackOff:**
+```bash
+# Verify you built images with minikube's Docker
+eval $(minikube docker-env)
+docker images | grep gatekeeperd
+```
+
+**Relay "connection refused" errors:**
+```bash
+# Check if gatekeeperd is ready
+kubectl get pods -n gatekeeper
+kubectl get endpoints gatekeeperd -n gatekeeper
+
+# The relay may retry and recover - check for "connected to server" log
+kubectl logs -l app.kubernetes.io/name=gatekeeper-relay -n gatekeeper
+```
+
+**Service not accessible:**
+```bash
+# Verify service is exposed
+kubectl get svc -n gatekeeper
+
+# Get fresh URL (NodePort may change)
+minikube service gatekeeperd -n gatekeeper --url
 ```
 
 ## Pre-commit Hook

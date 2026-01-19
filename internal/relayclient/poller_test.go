@@ -1,6 +1,7 @@
 package relayclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -614,5 +616,116 @@ func TestPoller_SendResponse_InvalidURL(t *testing.T) {
 	err := p.sendResponse(context.Background(), resp)
 	if err == nil {
 		t.Fatal("expected error for invalid URL")
+	}
+}
+
+func TestPoller_Run_LogsConnectedOnFirstSuccess(t *testing.T) {
+	var pollCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&pollCount, 1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	forwarder := NewForwarder("http://localhost:8080", "test", logger)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = p.Run(ctx)
+
+	// Verify "connected to server" was logged
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "connected to server") {
+		t.Errorf("expected 'connected to server' log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "test-channel") {
+		t.Errorf("expected channel name in log, got: %s", logOutput)
+	}
+}
+
+func TestPoller_Run_LogsConnectedAfterInitialFailures(t *testing.T) {
+	// When initial connections fail but then succeed, we log "connected to server"
+	// (not "connection recovered" because we were never connected before)
+	var pollCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&pollCount, 1)
+		if count <= 2 {
+			// First two polls fail
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		// Third poll succeeds
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	forwarder := NewForwarder("http://localhost:8080", "test", logger)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p.minBackoff = time.Millisecond
+	p.maxBackoff = 10 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_ = p.Run(ctx)
+
+	// Should log "connected to server" on first successful connection
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "connected to server") {
+		t.Errorf("expected 'connected to server' log, got: %s", logOutput)
+	}
+	// Should NOT log "connection recovered" since we were never connected before
+	if strings.Contains(logOutput, "connection recovered") {
+		t.Errorf("did not expect 'connection recovered' log for initial connection, got: %s", logOutput)
+	}
+}
+
+func TestPoller_Run_LogsConnectedThenRecovered(t *testing.T) {
+	var pollCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&pollCount, 1)
+		if count == 1 {
+			// First poll succeeds
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if count <= 3 {
+			// Second and third polls fail
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		// Fourth poll succeeds
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	forwarder := NewForwarder("http://localhost:8080", "test", logger)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p.minBackoff = time.Millisecond
+	p.maxBackoff = 10 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_ = p.Run(ctx)
+
+	logOutput := logBuf.String()
+	// Should have both messages
+	if !strings.Contains(logOutput, "connected to server") {
+		t.Errorf("expected 'connected to server' log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "connection recovered") {
+		t.Errorf("expected 'connection recovered' log, got: %s", logOutput)
 	}
 }

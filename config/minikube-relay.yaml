@@ -1,0 +1,31 @@
+# Helm values for gatekeeper-relay in minikube testing
+# Usage: helm install gatekeeper-relay ./charts/gatekeeper-relay -f config/minikube-relay.yaml -n gatekeeper
+replicaCount: 1
+
+image:
+  repository: gatekeeper-relay
+  pullPolicy: Never  # Use local image only (no registry for dev images)
+  tag: "dev"
+
+# Connect to gatekeeperd service in the cluster
+# Service exposes port 80, which routes to container port 8080 (tls.enabled=false)
+server: "http://gatekeeperd"
+
+# Resource limits for local testing
+resources:
+  requests:
+    cpu: 25m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+# Relay channel - forwards to httpbin.org/anything which echoes the request
+channels:
+  - name: httpbin
+    tokenKey: RELAY_TOKEN
+    destination: https://httpbin.org/anything
+
+# Secrets - must match the relay token in gatekeeperd config
+secrets:
+  RELAY_TOKEN: "minikube-test-relay-token"
