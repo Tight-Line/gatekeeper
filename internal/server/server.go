@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
-	"slices"
 	"time"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -74,34 +72,15 @@ func New(cfg Config) *Server {
 	// Prefer modern TLS
 	s.httpsServer.TLSConfig.MinVersion = tls.VersionTLS12
 
-	// HTTP server for ACME challenges and HTTPS redirect
+	// HTTP server for ACME challenges only (no redirect - this is a webhook gateway)
 	s.httpServer = &http.Server{
 		Addr:         cfg.HTTPAddr,
-		Handler:      s.certManager.HTTPHandler(http.HandlerFunc(s.redirectHTTPS)),
+		Handler:      s.certManager.HTTPHandler(nil),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
 	return s
-}
-
-// redirectHTTPS redirects HTTP requests to HTTPS
-// Only redirects to configured hostnames to prevent open redirect attacks
-func (s *Server) redirectHTTPS(w http.ResponseWriter, r *http.Request) {
-	// Extract hostname without port for validation
-	host := r.Host
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-
-	// Validate against configured hostnames
-	if !slices.Contains(s.cfg.Hostnames, host) {
-		http.Error(w, "unknown host", http.StatusBadRequest)
-		return
-	}
-
-	target := "https://" + r.Host + r.URL.RequestURI()
-	http.Redirect(w, r, target, http.StatusMovedPermanently)
 }
 
 // Start begins listening on both HTTP and HTTPS
