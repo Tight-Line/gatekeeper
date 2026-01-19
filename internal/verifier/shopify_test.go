@@ -14,12 +14,7 @@ func TestShopifyVerifier_Verify(t *testing.T) {
 	secret := "test-shopify-secret"
 	verifier := NewShopifyVerifier(secret)
 
-	tests := []struct {
-		name      string
-		setup     func() (*http.Request, []byte)
-		wantErr   bool
-		errString string
-	}{
+	tests := []verifierTestCase{
 		{
 			name: "valid signature",
 			setup: func() (*http.Request, []byte) {
@@ -80,31 +75,12 @@ func TestShopifyVerifier_Verify(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req, body := tt.setup()
-			err := verifier.Verify(req, body)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errString != "" && !strings.Contains(err.Error(), tt.errString) {
-					t.Errorf("expected error containing %q, got %q", tt.errString, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-			}
-		})
-	}
+	runVerifierTests(t, verifier, tests)
 }
 
 func TestShopifyVerifier_Type(t *testing.T) {
 	v := NewShopifyVerifier("secret")
-	if v.Type() != "shopify" {
-		t.Errorf("expected type 'shopify', got %q", v.Type())
-	}
+	assertVerifierType(t, v, "shopify")
 }
 
 // computeShopifySignature computes a valid Shopify signature for testing

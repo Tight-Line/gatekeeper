@@ -14,12 +14,7 @@ func TestGitHubVerifier_Verify(t *testing.T) {
 	secret := "test-webhook-secret"
 	verifier := NewGitHubVerifier(secret)
 
-	tests := []struct {
-		name      string
-		setup     func() (*http.Request, []byte)
-		wantErr   bool
-		errString string
-	}{
+	tests := []verifierTestCase{
 		{
 			name: "valid signature",
 			setup: func() (*http.Request, []byte) {
@@ -80,31 +75,12 @@ func TestGitHubVerifier_Verify(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req, body := tt.setup()
-			err := verifier.Verify(req, body)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errString != "" && !strings.Contains(err.Error(), tt.errString) {
-					t.Errorf("expected error containing %q, got %q", tt.errString, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-			}
-		})
-	}
+	runVerifierTests(t, verifier, tests)
 }
 
 func TestGitHubVerifier_Type(t *testing.T) {
 	v := NewGitHubVerifier("secret")
-	if v.Type() != "github" {
-		t.Errorf("expected type 'github', got %q", v.Type())
-	}
+	assertVerifierType(t, v, "github")
 }
 
 // computeGitHubSignature computes a valid GitHub signature for testing

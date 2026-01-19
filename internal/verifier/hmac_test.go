@@ -6,132 +6,80 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
+	"hash"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
+// computeHMACSignature computes an HMAC signature for testing
+func computeHMACSignature(secret string, body []byte, hashName, encoding string) string {
+	var h func() hash.Hash
+	if hashName == "SHA512" {
+		h = sha512.New
+	} else {
+		h = sha256.New
+	}
+
+	mac := hmac.New(h, []byte(secret))
+	mac.Write(body)
+
+	if encoding == "base64" {
+		return base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	}
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// makeHMACRequest creates a test request with an optional signature header
+func makeHMACRequest(body []byte, signature string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
+	if signature != "" {
+		req.Header.Set("X-Signature", signature)
+	}
+	return req
+}
+
 func TestHMACVerifier_Verify(t *testing.T) {
 	secret := "test-hmac-secret"
+	body := []byte(`{"test":"data"}`)
 
-	tests := []struct {
+	testCases := []struct {
 		name      string
 		hash      string
 		encoding  string
-		setup     func(v *HMACVerifier) (*http.Request, []byte)
+		signature string // empty means compute valid signature; "-" means no header
 		wantErr   bool
 		errString string
 	}{
-		{
-			name:     "valid sha256 hex signature",
-			hash:     "SHA256",
-			encoding: "hex",
-			setup: func(v *HMACVerifier) (*http.Request, []byte) {
-				body := []byte(`{"test":"data"}`)
-				mac := hmac.New(sha256.New, []byte(secret))
-				mac.Write(body)
-				signature := hex.EncodeToString(mac.Sum(nil))
-
-				req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
-				req.Header.Set("X-Signature", signature)
-				return req, body
-			},
-			wantErr: false,
-		},
-		{
-			name:     "valid sha256 base64 signature",
-			hash:     "SHA256",
-			encoding: "base64",
-			setup: func(v *HMACVerifier) (*http.Request, []byte) {
-				body := []byte(`{"test":"data"}`)
-				mac := hmac.New(sha256.New, []byte(secret))
-				mac.Write(body)
-				signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
-
-				req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
-				req.Header.Set("X-Signature", signature)
-				return req, body
-			},
-			wantErr: false,
-		},
-		{
-			name:     "valid sha512 hex signature",
-			hash:     "SHA512",
-			encoding: "hex",
-			setup: func(v *HMACVerifier) (*http.Request, []byte) {
-				body := []byte(`{"test":"data"}`)
-				mac := hmac.New(sha512.New, []byte(secret))
-				mac.Write(body)
-				signature := hex.EncodeToString(mac.Sum(nil))
-
-				req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
-				req.Header.Set("X-Signature", signature)
-				return req, body
-			},
-			wantErr: false,
-		},
-		{
-			name:     "missing header",
-			hash:     "SHA256",
-			encoding: "hex",
-			setup: func(v *HMACVerifier) (*http.Request, []byte) {
-				body := []byte(`{"test":"data"}`)
-				req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
-				return req, body
-			},
-			wantErr:   true,
-			errString: "signature header is empty",
-		},
-		{
-			name:     "invalid hex",
-			hash:     "SHA256",
-			encoding: "hex",
-			setup: func(v *HMACVerifier) (*http.Request, []byte) {
-				body := []byte(`{"test":"data"}`)
-				req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
-				req.Header.Set("X-Signature", "not-valid-hex-zzz")
-				return req, body
-			},
-			wantErr:   true,
-			errString: "cannot decode signature hex",
-		},
-		{
-			name:     "wrong signature",
-			hash:     "SHA256",
-			encoding: "hex",
-			setup: func(v *HMACVerifier) (*http.Request, []byte) {
-				body := []byte(`{"test":"data"}`)
-				req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
-				req.Header.Set("X-Signature", "abcd1234")
-				return req, body
-			},
-			wantErr:   true,
-			errString: "signature does not match",
-		},
+		{"valid sha256 hex", "SHA256", "hex", "", false, ""},
+		{"valid sha256 base64", "SHA256", "base64", "", false, ""},
+		{"valid sha512 hex", "SHA512", "hex", "", false, ""},
+		{"missing header", "SHA256", "hex", "-", true, "signature header is empty"},
+		{"invalid hex", "SHA256", "hex", "not-valid-hex-zzz", true, "cannot decode signature hex"},
+		{"wrong signature", "SHA256", "hex", "abcd1234", true, "signature does not match"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			verifier, err := NewHMACVerifier("X-Signature", secret, tt.hash, tt.encoding)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			verifier, err := NewHMACVerifier("X-Signature", secret, tc.hash, tc.encoding)
 			if err != nil {
 				t.Fatalf("failed to create verifier: %v", err)
 			}
 
-			req, body := tt.setup(verifier)
-			err = verifier.Verify(req, body)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errString != "" && !strings.Contains(err.Error(), tt.errString) {
-					t.Errorf("expected error containing %q, got %q", tt.errString, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+			var sig string
+			switch tc.signature {
+			case "":
+				sig = computeHMACSignature(secret, body, tc.hash, tc.encoding)
+			case "-":
+				sig = ""
+			default:
+				sig = tc.signature
 			}
+
+			req := makeHMACRequest(body, sig)
+			err = verifier.Verify(req, body)
+			assertVerifyResult(t, err, tc.wantErr, tc.errString)
 		})
 	}
 }
@@ -150,9 +98,7 @@ func TestNewHMACVerifier_InvalidConfig(t *testing.T) {
 
 func TestHMACVerifier_Type(t *testing.T) {
 	v, _ := NewHMACVerifier("X-Sig", "secret", "SHA256", "hex")
-	if v.Type() != "hmac" {
-		t.Errorf("expected type 'hmac', got %q", v.Type())
-	}
+	assertVerifierType(t, v, "hmac")
 }
 
 func TestHMACVerifier_InvalidBase64(t *testing.T) {
