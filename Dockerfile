@@ -8,7 +8,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY . .
+COPY cmd/ cmd/
+COPY internal/ internal/
 
 # Build binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o gatekeeperd ./cmd/gatekeeperd
@@ -16,15 +17,23 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o gatekeeperd ./cmd/gatekeeperd
 # Runtime stage
 FROM alpine:3.19
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates libcap
 
 WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/gatekeeperd .
 
-# Create config directory
-RUN mkdir -p /etc/gatekeeper
+# Allow binding to privileged ports (80, 443) without root
+RUN setcap cap_net_bind_service=+ep ./gatekeeperd
+
+# Create non-root user
+RUN addgroup -g 1000 gatekeeper && \
+    adduser -u 1000 -G gatekeeper -s /bin/sh -D gatekeeper && \
+    mkdir -p /etc/gatekeeper /var/cache/gatekeeper && \
+    chown -R gatekeeper:gatekeeper /app /etc/gatekeeper /var/cache/gatekeeper
+
+USER gatekeeper
 
 # Expose ports
 EXPOSE 80 443 8080 9090
