@@ -298,7 +298,7 @@ func TestRecording_BodyMap_InvalidJSON(t *testing.T) {
 	}
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Error("expected panic for invalid JSON")
 		}
 	}()
@@ -438,7 +438,7 @@ func TestRecording_WithBody_Panic(t *testing.T) {
 
 	// Create an unmarshallable value (channel cannot be JSON marshaled)
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Error("expected panic for unmarshallable body")
 		}
 	}()
@@ -454,7 +454,7 @@ func TestRecording_WithBodyField_InvalidBody(t *testing.T) {
 	}
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Error("expected panic for invalid JSON body")
 		}
 	}()
@@ -470,7 +470,7 @@ func TestRecording_WithBodyField_PathNotObject(t *testing.T) {
 	}
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Error("expected panic when path traverses non-object")
 		}
 	}()
@@ -486,7 +486,7 @@ func TestRecording_WithBodyField_UnmarshalableValue(t *testing.T) {
 	}
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Error("expected panic when value can't be marshaled")
 		}
 	}()
@@ -523,7 +523,7 @@ func TestRecording_Save_WriteError(t *testing.T) {
 	targetPath := filepath.Join(readOnlyDir, "test.json")
 
 	// Make the directory read-only after creation
-	if err := os.Chmod(readOnlyDir, 0o555); err != nil {
+	if os.Chmod(readOnlyDir, 0o555) != nil {
 		t.Skip("cannot set read-only permissions")
 	}
 	defer func() { _ = os.Chmod(readOnlyDir, 0o755) }() // Restore for cleanup

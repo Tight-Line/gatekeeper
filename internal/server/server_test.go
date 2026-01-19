@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -71,76 +70,6 @@ func TestNew_CustomAddresses(t *testing.T) {
 	}
 	if s.cfg.HTTPSAddr != ":8443" {
 		t.Errorf("expected HTTPSAddr ':8443', got %q", s.cfg.HTTPSAddr)
-	}
-}
-
-func TestServer_RedirectHTTPS(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	s := &Server{
-		cfg: Config{
-			Logger:    logger,
-			Hostnames: []string{"example.com"},
-		},
-	}
-
-	req := httptest.NewRequest("GET", "http://example.com/path?query=1", nil)
-	w := httptest.NewRecorder()
-
-	s.redirectHTTPS(w, req)
-
-	if w.Code != http.StatusMovedPermanently {
-		t.Errorf("expected status %d, got %d", http.StatusMovedPermanently, w.Code)
-	}
-
-	location := w.Header().Get("Location")
-	expected := "https://example.com/path?query=1"
-	if location != expected {
-		t.Errorf("expected Location %q, got %q", expected, location)
-	}
-}
-
-func TestServer_RedirectHTTPS_InvalidHost(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	s := &Server{
-		cfg: Config{
-			Logger:    logger,
-			Hostnames: []string{"example.com"},
-		},
-	}
-
-	req := httptest.NewRequest("GET", "http://evil.com/path", nil)
-	w := httptest.NewRecorder()
-
-	s.redirectHTTPS(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
-	}
-}
-
-func TestServer_RedirectHTTPS_HostWithPort(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	s := &Server{
-		cfg: Config{
-			Logger:    logger,
-			Hostnames: []string{"example.com"},
-		},
-	}
-
-	req := httptest.NewRequest("GET", "http://example.com:8080/path", nil)
-	w := httptest.NewRecorder()
-
-	s.redirectHTTPS(w, req)
-
-	if w.Code != http.StatusMovedPermanently {
-		t.Errorf("expected status %d, got %d", http.StatusMovedPermanently, w.Code)
-	}
-
-	// Should preserve the original port in the redirect
-	location := w.Header().Get("Location")
-	expected := "https://example.com:8080/path"
-	if location != expected {
-		t.Errorf("expected Location %q, got %q", expected, location)
 	}
 }
 

@@ -80,82 +80,86 @@ func (p *Poller) Run(ctx context.Context) error {
 
 		webhook, err := p.poll(ctx)
 		if err != nil {
-			if ctx.Err() != nil {
-				// Context canceled, exit gracefully
-				return nil
+			if done, retErr := p.handlePollError(ctx, err, &backoff, &consecutiveFailures); done {
+				return retErr
 			}
-
-			consecutiveFailures++
-			p.logger.Error("poll error",
-				"channel", p.channelName,
-				"error", err,
-				"backoff", backoff,
-				"consecutive_failures", consecutiveFailures,
-				"max_failures", p.maxConsecutiveFailures,
-			)
-
-			// Check if we've exceeded max consecutive failures
-			if consecutiveFailures >= p.maxConsecutiveFailures {
-				p.logger.Error("max consecutive failures reached, exiting",
-					"channel", p.channelName,
-					"consecutive_failures", consecutiveFailures,
-				)
-				return ErrMaxConsecutiveFailures
-			}
-
-			// Exponential backoff on error
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return nil
-			}
-			backoff = min(backoff*2, p.maxBackoff)
 			continue
 		}
 
-		// Reset backoff and failure count on successful connection
 		backoff = p.minBackoff
 		consecutiveFailures = 0
 
-		if webhook == nil {
-			// No webhook (timeout), just reconnect immediately
-			continue
+		if webhook != nil {
+			p.handleWebhook(ctx, webhook)
 		}
+	}
+}
 
-		// Forward the webhook and get response
-		resp, err := p.forwarder.Forward(ctx, webhook)
-		if err != nil {
-			p.logger.Error("forward error",
-				"channel", p.channelName,
-				"webhook_id", webhook.ID,
-				"error", err,
-			)
-			// Send error response back to server so the caller doesn't hang
-			errorResp := &Response{
-				RequestID:  webhook.ID,
-				StatusCode: http.StatusBadGateway,
-				Headers:    map[string][]string{"Content-Type": {"text/plain"}},
-				Body:       base64.StdEncoding.EncodeToString([]byte("relay: failed to forward to destination")),
-			}
-			if sendErr := p.sendResponse(ctx, errorResp); sendErr != nil {
-				p.logger.Error("failed to send error response",
-					"channel", p.channelName,
-					"webhook_id", webhook.ID,
-					"error", sendErr,
-				)
-			}
-			// Continue polling (don't count as connection failure)
-			continue
-		}
+func (p *Poller) handlePollError(ctx context.Context, err error, backoff *time.Duration, failures *int) (done bool, retErr error) {
+	if ctx.Err() != nil {
+		return true, nil
+	}
 
-		// Send response back to server
-		if err := p.sendResponse(ctx, resp); err != nil {
-			p.logger.Error("failed to send response",
-				"channel", p.channelName,
-				"webhook_id", webhook.ID,
-				"error", err,
-			)
-		}
+	*failures++
+	p.logger.Error("poll error",
+		"channel", p.channelName,
+		"error", err,
+		"backoff", *backoff,
+		"consecutive_failures", *failures,
+		"max_failures", p.maxConsecutiveFailures,
+	)
+
+	if *failures >= p.maxConsecutiveFailures {
+		p.logger.Error("max consecutive failures reached, exiting",
+			"channel", p.channelName,
+			"consecutive_failures", *failures,
+		)
+		return true, ErrMaxConsecutiveFailures
+	}
+
+	select {
+	case <-time.After(*backoff):
+	case <-ctx.Done():
+		return true, nil
+	}
+	*backoff = min(*backoff*2, p.maxBackoff)
+	return false, nil
+}
+
+func (p *Poller) handleWebhook(ctx context.Context, webhook *Webhook) {
+	resp, err := p.forwarder.Forward(ctx, webhook)
+	if err != nil {
+		p.logger.Error("forward error",
+			"channel", p.channelName,
+			"webhook_id", webhook.ID,
+			"error", err,
+		)
+		p.sendErrorResponse(ctx, webhook.ID)
+		return
+	}
+
+	if err := p.sendResponse(ctx, resp); err != nil {
+		p.logger.Error("failed to send response",
+			"channel", p.channelName,
+			"webhook_id", webhook.ID,
+			"error", err,
+		)
+	}
+}
+
+func (p *Poller) sendErrorResponse(ctx context.Context, webhookID string) {
+	errorResp := &Response{
+		RequestID:  webhookID,
+		StatusCode: http.StatusBadGateway,
+		Headers:    map[string][]string{"Content-Type": {"text/plain"}},
+		Body:       base64.StdEncoding.EncodeToString([]byte("relay: failed to forward to destination")),
+	}
+	if sendErr := p.sendResponse(ctx, errorResp); sendErr != nil {
+		p.logger.Error("failed to send error response",
+			"channel", p.channelName,
+			"webhook_id", webhookID,
+			"error", sendErr,
+		)
 	}
 }
 

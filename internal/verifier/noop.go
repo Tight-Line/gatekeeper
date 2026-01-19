@@ -12,7 +12,7 @@ func NewNoopVerifier() *NoopVerifier {
 }
 
 // Verify always returns nil (success)
-func (v *NoopVerifier) Verify(r *http.Request, payload []byte) error {
+func (v *NoopVerifier) Verify(_ *http.Request, _ []byte) error {
 	return nil
 }
 

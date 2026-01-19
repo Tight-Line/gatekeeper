@@ -124,7 +124,7 @@ func (h *Handler) handleResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.manager.SendResponse(&resp); err != nil {
+	if h.manager.SendResponse(&resp) != nil {
 		// SendResponse only returns ErrRequestNotFound
 		h.logger.Warn("response for unknown request",
 			"request_id", resp.RequestID,

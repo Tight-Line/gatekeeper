@@ -33,20 +33,20 @@ data:
       {{ $name }}:
         type: {{ $verifier.type }}
         {{- if eq $verifier.type "slack" }}
-        signing_secret: ${{"{"}}{{ $verifier.signingSecretKey }}{{"}"}}
+        signing_secret: ${{ "{" }}{{ $verifier.signingSecretKey }}{{ "}" }}
         {{- if $verifier.maxTimestampAge }}
         max_timestamp_age: {{ $verifier.maxTimestampAge }}
         {{- end }}
         {{- else if eq $verifier.type "github" }}
-        secret: ${{"{"}}{{ $verifier.secretKey }}{{"}"}}
+        secret: ${{ "{" }}{{ $verifier.secretKey }}{{ "}" }}
         {{- else if eq $verifier.type "shopify" }}
-        secret: ${{"{"}}{{ $verifier.secretKey }}{{"}"}}
+        secret: ${{ "{" }}{{ $verifier.secretKey }}{{ "}" }}
         {{- else if eq $verifier.type "api_key" }}
         header: {{ $verifier.header | quote }}
-        token: ${{"{"}}{{ $verifier.tokenKey }}{{"}"}}
+        token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}
         {{- else if eq $verifier.type "hmac" }}
         header: {{ $verifier.header | quote }}
-        secret: ${{"{"}}{{ $verifier.secretKey }}{{"}"}}
+        secret: ${{ "{" }}{{ $verifier.secretKey }}{{ "}" }}
         hash: {{ $verifier.hash | quote }}
         encoding: {{ $verifier.encoding | quote }}
         {{- end }}
@@ -65,6 +65,6 @@ data:
         {{- if .destination }}
         destination: {{ .destination | quote }}
         {{- else if .relayTokenKey }}
-        relay_token: ${{"{"}}{{ .relayTokenKey }}{{"}"}}
+        relay_token: ${{ "{" }}{{ .relayTokenKey }}{{ "}" }}
         {{- end }}
       {{- end }}

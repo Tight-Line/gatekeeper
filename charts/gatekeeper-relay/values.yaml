@@ -41,9 +41,11 @@ resources:
   requests:
     cpu: 50m
     memory: 32Mi
+    ephemeral-storage: 64Mi
   limits:
     cpu: 200m
     memory: 128Mi
+    ephemeral-storage: 256Mi
 
 # Pod settings
 podAnnotations: {}

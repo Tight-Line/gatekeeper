@@ -12,6 +12,6 @@ data:
     channels:
       {{- range .Values.channels }}
       - name: {{ .name | quote }}
-        token: ${{"{"}}{{ .tokenKey }}{{"}"}}
+        token: ${{ "{" }}{{ .tokenKey }}{{ "}" }}
         destination: {{ .destination | quote }}
       {{- end }}

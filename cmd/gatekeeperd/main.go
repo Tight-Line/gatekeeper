@@ -258,7 +258,7 @@ func runTLSServer(ctx context.Context, cfg *config.Config, handler http.Handler,
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
 	}
@@ -286,7 +286,7 @@ func runHTTPServer(ctx context.Context, addr string, handler http.Handler, logge
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
 	}
