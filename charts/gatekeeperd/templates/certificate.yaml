@@ -1,0 +1,25 @@
+{{- if and .Values.gateway.enabled .Values.gateway.tls.enabled }}
+{{- $hosts := list -}}
+{{- range .Values.routes }}
+{{- if not (has .hostname $hosts) }}
+{{- $hosts = append $hosts .hostname }}
+{{- end }}
+{{- end }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "gatekeeperd.fullname" . }}-tls
+  namespace: {{ .Values.gateway.tls.secretNamespace | default .Values.gateway.gatewayNamespace }}
+  labels:
+    {{- include "gatekeeperd.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "gatekeeperd.fullname" . }}-tls
+  issuerRef:
+    kind: {{ .Values.gateway.tls.issuerKind | default "ClusterIssuer" }}
+    name: {{ .Values.gateway.tls.issuerName | required "gateway.tls.issuerName is required when gateway.tls.enabled=true" }}
+  dnsNames:
+    {{- range $hosts }}
+    - {{ . | quote }}
+    {{- end }}
+{{- end }}

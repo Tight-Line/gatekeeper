@@ -67,6 +67,16 @@ gateway:
   sectionName: ""
   # Annotations to add to HTTPRoute resources
   annotations: {}
+  # TLS certificate configuration (uses cert-manager)
+  tls:
+    enabled: false
+    # cert-manager issuer name (required if tls.enabled=true)
+    issuerName: ""  # e.g., "letsencrypt-prod"
+    # Issuer kind: ClusterIssuer or Issuer
+    issuerKind: ClusterIssuer
+    # Namespace for the certificate secret (defaults to gateway.gatewayNamespace)
+    # The secret must be in the same namespace as the Gateway for Traefik to use it
+    secretNamespace: ""
 
 # Metrics settings
 metrics:
