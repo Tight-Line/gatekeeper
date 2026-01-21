@@ -333,7 +333,9 @@ Smee is explicitly intended for development only and is hosted as a third-party 
 
 General-purpose tunnel services expose your localhost to the internet via a public URL. They are useful for development and testing, but they perform no webhook-specific validation. Any traffic that reaches the public URL is forwarded to your application.
 
-These tools solve network reachability but not authentication. You still need to verify signatures in your application code. Gatekeeper handles both: it provides network reachability (via relay mode) and authentication (via provider-specific verification) in one package.
+These tools solve network reachability but not authentication. Any payload that arrives at the tunnel endpoint is forwarded directly into your private network, where your application must validate it. This means potentially malicious traffic enters your network before you can reject it.
+
+Gatekeeper validates in the cloud before forwarding. Invalid signatures, disallowed IPs, and malformed payloads are rejected at the edge. Only authenticated requests reach your private network. This gives security teams confidence that the traffic crossing the perimeter has already been verified.
 
 ### Webhook Relay
 
