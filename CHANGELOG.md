@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Helm charts now publish only on version tags, not on every push to main
+
 ## [0.1.1] - 2026-01-21
 
 ### Added
