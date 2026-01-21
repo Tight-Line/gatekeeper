@@ -17,6 +17,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o gatekeeper-relay ./cmd/gatekeeper-relay
 # Runtime stage
 FROM alpine:3.19
 
+LABEL org.opencontainers.image.source=https://github.com/Tight-Line/gatekeeper
+
 RUN apk --no-cache add ca-certificates
 
 WORKDIR /app

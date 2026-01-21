@@ -17,6 +17,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o gatekeeperd ./cmd/gatekeeperd
 # Runtime stage
 FROM alpine:3.19
 
+LABEL org.opencontainers.image.source=https://github.com/Tight-Line/gatekeeper
+
 RUN apk --no-cache add ca-certificates libcap
 
 WORKDIR /app
