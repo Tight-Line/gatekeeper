@@ -31,9 +31,13 @@ A webhook authentication proxy for enterprise environments.
 
 ## Motivation
 
-Many organizations operate internal networks that are intentionally isolated from the public internet. This is good security practice. However, modern SaaS applications like Slack, Google Workspace, and GitHub rely on webhooks to notify your systems of events. These webhooks originate from the vendor's infrastructure and must reach your internal services.
+Development and staging environments are often isolated on private networks or behind VPNs, intentionally unreachable from the public internet. Production applications that handle sensitive internal workflows may be similarly restricted. This is good security practice.
 
-The traditional approach is to open firewall ports for each webhook source. This becomes problematic because:
+However, modern SaaS applications like Slack, Google Workspace, and GitHub rely on webhooks to notify your systems of events. These webhooks originate from the vendor's infrastructure and must somehow reach your private services. Production applications exposed to the public internet rarely face this problem, but private environments do.
+
+Some vendors provide their own solutions. Stripe CLI can forward webhooks to localhost during development. BrowserStack provides a binary that tunnels browser traffic into private networks. These tools work, but only for their specific vendor.
+
+The traditional general-purpose approach is to open firewall ports for each webhook source. This becomes problematic because:
 
 1. Major cloud providers like AWS and Google use thousands of IP addresses that change frequently. Slack webhooks, for example, can originate from any EC2 instance in AWS.
 
@@ -316,6 +320,14 @@ General-purpose API gateways can terminate TLS and route traffic, but they do no
 ### Cloud Provider Solutions
 
 AWS API Gateway and Google Cloud Endpoints can handle webhook ingestion, but they introduce vendor lock-in and do not solve the fundamental problem: you still need to validate signatures, and you still need to route traffic to internal services that may not be reachable from the cloud provider's network.
+
+### Smee.io
+
+Smee.io is a webhook relay service created by the Probot team for GitHub App development. It receives webhooks at a public URL and forwards them to a local client via Server-Sent Events.
+
+The relay concept is similar to gatekeeper's relay mode, but Smee is a pure pass-through. It performs no signature verification, IP filtering, or payload validation. Anyone who discovers your channel URL can send arbitrary payloads to your application. Smee channels are also not authenticated, so webhook contents are visible to anyone with the channel ID.
+
+Smee is explicitly intended for development only and is hosted as a third-party service. Gatekeeper provides proper provider-specific signature verification, is self-hosted, and supports both development and production use cases.
 
 ---
 
