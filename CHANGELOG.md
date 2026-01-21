@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-01-21
+
 ### Changed
 - Helm chart default image repositories now point to GHCR (ghcr.io/tight-line/*)
 
