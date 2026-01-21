@@ -1,7 +1,7 @@
 # gatekeeper
 
 [![CI](https://github.com/tight-line/gatekeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/tight-line/gatekeeper/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/tight-line/gatekeeper/graph/badge.svg)](https://codecov.io/gh/tight-line/gatekeeper)
+[![codecov](https://codecov.io/gh/tight-line/gatekeeper/graph/badge.svg?token=W6O7WA775C)](https://codecov.io/gh/tight-line/gatekeeper)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Tight-Line_gatekeeper&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Tight-Line_gatekeeper)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Tight-Line_gatekeeper&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Tight-Line_gatekeeper)
 [![Snyk](https://snyk.io/test/github/tight-line/gatekeeper/badge.svg)](https://snyk.io/test/github/tight-line/gatekeeper)
