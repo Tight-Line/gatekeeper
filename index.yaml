@@ -2,6 +2,25 @@ apiVersion: v1
 entries:
   gatekeeper-relay:
   - apiVersion: v2
+    appVersion: 0.1.6
+    created: "2026-01-21T10:53:25.688941638Z"
+    description: Relay client for gatekeeper that enables webhook delivery to private
+      networks
+    digest: 00659b34867b0da3dd0d912b6bcc1c2e6dcd36af2d3fa3cf3e121e1af687c00b
+    keywords:
+    - webhook
+    - relay
+    - proxy
+    - private-network
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeper-relay
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.1.6/gatekeeper-relay-0.1.6.tgz
+    version: 0.1.6
+  - apiVersion: v2
     appVersion: 0.1.4
     created: "2026-01-21T10:34:08.525843637Z"
     description: Relay client for gatekeeper that enables webhook delivery to private
@@ -97,6 +116,27 @@ entries:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.1.0/gatekeeper-relay-0.1.0.tgz
     version: 0.1.0
   gatekeeperd:
+  - apiVersion: v2
+    appVersion: 0.1.6
+    created: "2026-01-21T10:53:25.872264126Z"
+    description: Webhook authentication proxy server for validating and forwarding
+      webhooks
+    digest: 8d9a5bdf819170fff889dcfc40c41daa21717e51ca42f841b92e024ee2d085d4
+    keywords:
+    - webhook
+    - proxy
+    - authentication
+    - slack
+    - github
+    - relay
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeperd
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.1.6/gatekeeperd-0.1.6.tgz
+    version: 0.1.6
   - apiVersion: v2
     appVersion: 0.1.4
     created: "2026-01-21T10:34:08.726531273Z"
@@ -202,4 +242,4 @@ entries:
     urls:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.1.0/gatekeeperd-0.1.0.tgz
     version: 0.1.0
-generated: "2026-01-21T10:34:08.726563283Z"
+generated: "2026-01-21T10:53:25.872306636Z"
