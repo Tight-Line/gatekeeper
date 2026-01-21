@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Helm chart default image repositories now point to GHCR (ghcr.io/tight-line/*)
+
+### Removed
+- Docker Hub workflow (images are published to GHCR only)
+
 ## [0.1.2] - 2026-01-21
 
 ### Changed

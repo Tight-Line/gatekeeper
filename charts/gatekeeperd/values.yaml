@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: gatekeeper
+  repository: ghcr.io/tight-line/gatekeeperd
   pullPolicy: IfNotPresent
   tag: ""
 

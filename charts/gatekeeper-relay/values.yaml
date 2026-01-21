@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: gatekeeper-relay
+  repository: ghcr.io/tight-line/gatekeeper-relay
   pullPolicy: IfNotPresent
   tag: ""
 
