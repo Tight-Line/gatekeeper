@@ -2,8 +2,8 @@ apiVersion: v2
 name: gatekeeper-relay
 description: Relay client for gatekeeper that enables webhook delivery to private networks
 type: application
-version: 0.1.6
-appVersion: "0.1.6"
+version: 0.1.8
+appVersion: "0.1.8"
 keywords:
   - webhook
   - relay

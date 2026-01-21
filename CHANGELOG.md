@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-01-21
+
 ### Added
 - Gateway resource template with `gateway.create=true` option for proper per-hostname TLS certificate handling
 - Multiple Gateways can share the same Traefik LoadBalancer IP with independent TLS configs
