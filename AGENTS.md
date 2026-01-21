@@ -163,3 +163,53 @@ See [docs/PROVIDER_DEVELOPMENT.md](docs/PROVIDER_DEVELOPMENT.md) for the step-by
 - End-to-end testing workflow
 
 **Maintenance note**: Keep PROVIDER_DEVELOPMENT.md up-to-date when adding new features that affect the provider development workflow (e.g., new recording formats, new verifier types, changes to the testutil package).
+
+## Changelog Maintenance
+
+**IMPORTANT**: Always update CHANGELOG.md when making changes to the codebase.
+
+### When to Update
+
+Add an entry to the `[Unreleased]` section of CHANGELOG.md for:
+- New features or capabilities
+- Bug fixes
+- Breaking changes
+- Significant refactorings that affect behavior
+- Dependency updates that affect functionality
+
+Do NOT add entries for:
+- Minor code cleanup or formatting
+- Internal refactoring with no behavior change
+- Documentation-only changes
+- Test-only changes
+
+### How to Update
+
+1. Add entries under the appropriate subsection in `[Unreleased]`:
+   - `### Added` - new features
+   - `### Changed` - changes to existing functionality
+   - `### Deprecated` - features that will be removed
+   - `### Removed` - removed features
+   - `### Fixed` - bug fixes
+   - `### Security` - security-related changes
+
+2. Write entries from the user's perspective, not the developer's:
+   - Good: "Relay client logs connection status on startup and recovery"
+   - Bad: "Added logging calls to poller.go"
+
+3. Keep entries concise - one line per change when possible.
+
+### Cleaning Up the Changelog
+
+Before adding new entries, review and clean up existing `[Unreleased]` content:
+- Combine related entries (e.g., multiple iterations on the same feature)
+- Remove entries that were superseded by later work
+- Check `git log $(git describe --tags --abbrev=0)..HEAD --oneline` to see all commits since the last tag and ensure significant changes are captured
+
+### Creating Releases
+
+Use `scripts/make-tag <version>` to create a release. This script:
+1. Runs tests to ensure CI will pass
+2. Updates Helm chart versions
+3. Moves `[Unreleased]` content to a dated release section
+4. Commits and creates the git tag
