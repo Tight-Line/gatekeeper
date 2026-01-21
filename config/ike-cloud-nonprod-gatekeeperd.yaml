@@ -42,21 +42,8 @@ verifiers:
   noop:
     type: noop
 
-# IP allowlists - allow all cloud providers for now
-# Can be tightened later to specific providers
-ipAllowlists:
-  aws:
-    fetchUrl: "https://ip-ranges.amazonaws.com/ip-ranges.json"
-    fetchJq: ".prefixes[].ip_prefix"
-    refreshInterval: 24h
-  google:
-    fetchUrl: "https://www.gstatic.com/ipranges/goog.json"
-    fetchJq: ".prefixes[].ipv4Prefix"
-    refreshInterval: 24h
-  microsoft:
-    # Microsoft doesn't publish a simple IP list; using noop verifier instead
-    cidrs:
-      - "0.0.0.0/0"  # Allow all (relying on noop verifier for Teams/Outlook)
+# IP allowlists - using predefined lists from the chart
+# See charts/gatekeeperd/values.yaml for full list of predefined allowlists
 
 # Proxy routes - all using relay delivery to tinypulse-dev cluster
 routes:
@@ -70,14 +57,15 @@ routes:
   # MS Teams Bot webhooks - noop verifier (Teams validates via Bot Framework)
   - hostname: tp-bot-staging.cloud.ike.tools
     path: /
-    ipAllowlist: microsoft
+    ipAllowlist: azure-bot
     verifier: noop
     relayTokenKey: RELAY_TOKEN_MSTEAMS
 
   # Outlook Calendar webhooks - noop verifier
+  # Note: Using azure-bot for now; may need different list for Outlook/Graph API
   - hostname: tp-coach-staging.cloud.ike.tools
     path: /
-    ipAllowlist: microsoft
+    ipAllowlist: azure-bot
     verifier: noop
     relayTokenKey: RELAY_TOKEN_OUTLOOK
 
