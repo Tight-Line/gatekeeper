@@ -63,8 +63,9 @@ if ! grep -q "^## \[Unreleased\]" CHANGELOG.md; then
     error "CHANGELOG.md missing [Unreleased] section"
 fi
 
-UNRELEASED_CONTENT=$(sed -n '/^## \[Unreleased\]/,/^## \[/p' CHANGELOG.md | head -n -1 | tail -n +2)
-if [ -z "$(echo "$UNRELEASED_CONTENT" | grep -v '^$')" ]; then
+# Extract content between [Unreleased] and next ## section
+UNRELEASED_CONTENT=$(sed -n '/^## \[Unreleased\]/,/^## \[/p' CHANGELOG.md | sed '1d;$d')
+if [ -z "$(echo "$UNRELEASED_CONTENT" | grep -v '^$' | grep -v '^###')" ]; then
     error "No content in [Unreleased] section of CHANGELOG.md"
 fi
 
@@ -96,16 +97,15 @@ TODAY=$(date +%Y-%m-%d)
 
 # Create new changelog content
 {
-    # Keep header and add new Unreleased section
-    sed -n '1,/^## \[Unreleased\]/p' CHANGELOG.md | head -n -1
+    # Keep header (everything before [Unreleased])
+    sed -n '1,/^## \[Unreleased\]/p' CHANGELOG.md | sed '$d'
     echo "## [Unreleased]"
     echo ""
     echo "## [$VERSION] - $TODAY"
-    # Get content from old Unreleased section (skip the header line)
-    sed -n '/^## \[Unreleased\]/,/^## \[/p' CHANGELOG.md | head -n -1 | tail -n +2
-    # Get everything after the old Unreleased section
-    sed -n '/^## \[Unreleased\]/,/^## \[/p' CHANGELOG.md | tail -n 1
-    sed -n '/^## \[Unreleased\]/,$p' CHANGELOG.md | sed -n '/^## \[[0-9]/,$p' | tail -n +2
+    # Get content from old Unreleased section (skip first and last lines)
+    sed -n '/^## \[Unreleased\]/,/^## \[/p' CHANGELOG.md | sed '1d;$d'
+    # Get everything from the next release section onward
+    sed -n '/^## \[Unreleased\]/,$p' CHANGELOG.md | sed -n '/^## \[[0-9]/,$p'
 } > CHANGELOG.md.new
 
 mv CHANGELOG.md.new CHANGELOG.md
