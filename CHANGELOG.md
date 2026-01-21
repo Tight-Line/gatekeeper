@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Gateway API (HTTPRoute) support in gatekeeperd Helm chart as alternative to Ingress
-- Example values files for ike-cloud-nonprod and tinypulse-dev deployments
+- Slack URL verification challenges are handled directly by gatekeeper, eliminating the need for backend services to respond within Slack's 3-second timeout
+- Predefined IP allowlists for common webhook providers (AWS, Google, Azure Bot Service, GitHub, Salesforce)
 
 ## [0.1.3] - 2026-01-21
 
