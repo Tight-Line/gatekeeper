@@ -55,17 +55,24 @@ ingress:
     secretName: ""
 
 # Gateway API configuration (Kubernetes Gateway API)
-# Use this when your cluster's cert-manager is configured with gatewayHTTPRoute solver.
 # Hostnames are automatically derived from routes - no need to duplicate them here.
 gateway:
   enabled: false
-  # Name of the Gateway resource to attach HTTPRoutes to
+  # Create our own Gateway resource (recommended for proper TLS cert handling)
+  # When true: creates a Gateway with per-hostname listeners, each with TLS
+  # When false: HTTPRoutes attach to an existing Gateway (gatewayName/gatewayNamespace)
+  create: false
+  # GatewayClass name (required when create=true), e.g., "traefik"
+  gatewayClassName: ""
+  # Port for Gateway listeners (default 8443 matches Traefik's websecure entrypoint)
+  port: 8443
+  # Name of existing Gateway to attach to (when create=false)
   gatewayName: ""  # e.g., "traefik-gateway"
-  # Namespace where the Gateway resource lives
+  # Namespace of existing Gateway (when create=false)
   gatewayNamespace: ""  # e.g., "traefik"
-  # Optional: specific listener section on the Gateway (leave empty for default)
+  # Listener section on existing Gateway (when create=false, optional)
   sectionName: ""
-  # Annotations to add to HTTPRoute resources
+  # Annotations for HTTPRoute resources
   annotations: {}
   # TLS certificate configuration (uses cert-manager)
   tls:
@@ -74,8 +81,9 @@ gateway:
     issuerName: ""  # e.g., "letsencrypt-prod"
     # Issuer kind: ClusterIssuer or Issuer
     issuerKind: ClusterIssuer
-    # Namespace for the certificate secret (defaults to gateway.gatewayNamespace)
-    # The secret must be in the same namespace as the Gateway for Traefik to use it
+    # Namespace for certificate secret
+    # Defaults to release namespace when gateway.create=true
+    # Defaults to gateway.gatewayNamespace when gateway.create=false
     secretNamespace: ""
 
 # Metrics settings

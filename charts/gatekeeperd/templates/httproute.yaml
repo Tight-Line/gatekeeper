@@ -20,11 +20,17 @@ metadata:
   {{- end }}
 spec:
   parentRefs:
+    {{- if $.Values.gateway.create }}
+    - name: {{ $fullName }}
+      namespace: {{ $.Release.Namespace }}
+      sectionName: {{ $host | replace "." "-" }}
+    {{- else }}
     - name: {{ $.Values.gateway.gatewayName }}
       namespace: {{ $.Values.gateway.gatewayNamespace }}
       {{- if $.Values.gateway.sectionName }}
       sectionName: {{ $.Values.gateway.sectionName }}
       {{- end }}
+    {{- end }}
   hostnames:
     - {{ $host | quote }}
   rules:

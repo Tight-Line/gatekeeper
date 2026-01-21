@@ -1,0 +1,34 @@
+{{- if and .Values.gateway.enabled .Values.gateway.create }}
+{{- $fullName := include "gatekeeperd.fullname" . -}}
+{{- $hosts := list -}}
+{{- range .Values.routes }}
+{{- if not (has .hostname $hosts) }}
+{{- $hosts = append $hosts .hostname }}
+{{- end }}
+{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "gatekeeperd.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gateway.gatewayClassName | required "gateway.gatewayClassName is required when gateway.create=true" }}
+  listeners:
+    {{- range $host := $hosts }}
+    - name: {{ $host | replace "." "-" }}
+      port: {{ $.Values.gateway.port | default 8443 }}
+      protocol: HTTPS
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ $fullName }}-tls
+            namespace: {{ $.Values.gateway.tls.secretNamespace | default $.Release.Namespace }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+{{- end }}

@@ -5,12 +5,13 @@
 {{- $hosts = append $hosts .hostname }}
 {{- end }}
 {{- end }}
+{{- $secretNamespace := .Values.gateway.tls.secretNamespace | default (ternary .Release.Namespace .Values.gateway.gatewayNamespace .Values.gateway.create) }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: {{ include "gatekeeperd.fullname" . }}-tls
-  namespace: {{ .Values.gateway.tls.secretNamespace | default .Values.gateway.gatewayNamespace }}
+  namespace: {{ $secretNamespace }}
   labels:
     {{- include "gatekeeperd.labels" . | nindent 4 }}
 spec:
