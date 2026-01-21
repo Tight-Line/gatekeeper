@@ -1,0 +1,98 @@
+# Gatekeeperd values for ike-cloud-nonprod cluster
+# Namespace: gatekeeper
+#
+# Deploy with:
+#   kubectl config use-context ike-cloud-nonprod
+#   kubectl create namespace gatekeeper
+#   kubectl create secret generic gatekeeperd-secrets -n gatekeeper \
+#     --from-literal=SLACK_SIGNING_SECRET='your-slack-signing-secret' \
+#     --from-literal=RELAY_TOKEN_SLACK='$(openssl rand -hex 32)' \
+#     --from-literal=RELAY_TOKEN_MSTEAMS='$(openssl rand -hex 32)' \
+#     --from-literal=RELAY_TOKEN_OUTLOOK='$(openssl rand -hex 32)' \
+#     --from-literal=RELAY_TOKEN_GCAL='$(openssl rand -hex 32)'
+#   helm upgrade --install gatekeeperd charts/gatekeeperd -n gatekeeper \
+#     -f config/ike-cloud-nonprod-gatekeeperd.yaml
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/tight-line/gatekeeperd
+  pullPolicy: IfNotPresent
+  # tag: "" uses appVersion from Chart.yaml
+
+# Use existing secret created manually (see deploy instructions above)
+existingSecret: "gatekeeperd-secrets"
+
+# Gateway API configuration (ike-cloud-nonprod uses Gateway API with Traefik)
+gateway:
+  enabled: true
+  gatewayName: "traefik-gateway"
+  gatewayNamespace: "traefik"
+
+# Disable Ingress (using Gateway API instead)
+ingress:
+  enabled: false
+
+# Verifier definitions
+verifiers:
+  slack:
+    type: slack
+    signingSecretKey: SLACK_SIGNING_SECRET
+    maxTimestampAge: 5m
+  noop:
+    type: noop
+
+# IP allowlists - allow all cloud providers for now
+# Can be tightened later to specific providers
+ipAllowlists:
+  aws:
+    fetchUrl: "https://ip-ranges.amazonaws.com/ip-ranges.json"
+    fetchJq: ".prefixes[].ip_prefix"
+    refreshInterval: 24h
+  google:
+    fetchUrl: "https://www.gstatic.com/ipranges/goog.json"
+    fetchJq: ".prefixes[].ipv4Prefix"
+    refreshInterval: 24h
+  microsoft:
+    # Microsoft doesn't publish a simple IP list; using noop verifier instead
+    cidrs:
+      - "0.0.0.0/0"  # Allow all (relying on noop verifier for Teams/Outlook)
+
+# Proxy routes - all using relay delivery to tinypulse-dev cluster
+routes:
+  # Slack webhooks - verified with Slack signing secret
+  - hostname: tp-slackhook-staging.cloud.ike.tools
+    path: /
+    ipAllowlist: aws
+    verifier: slack
+    relayTokenKey: RELAY_TOKEN_SLACK
+
+  # MS Teams Bot webhooks - noop verifier (Teams validates via Bot Framework)
+  - hostname: tp-bot-staging.cloud.ike.tools
+    path: /
+    ipAllowlist: microsoft
+    verifier: noop
+    relayTokenKey: RELAY_TOKEN_MSTEAMS
+
+  # Outlook Calendar webhooks - noop verifier
+  - hostname: tp-coach-staging.cloud.ike.tools
+    path: /
+    ipAllowlist: microsoft
+    verifier: noop
+    relayTokenKey: RELAY_TOKEN_OUTLOOK
+
+  # Google Calendar webhooks - noop verifier (no validation currently)
+  - hostname: tp-coach-api-staging.cloud.ike.tools
+    path: /
+    ipAllowlist: google
+    verifier: noop
+    relayTokenKey: RELAY_TOKEN_GCAL
+
+# Resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

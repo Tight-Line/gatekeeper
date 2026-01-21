@@ -11,7 +11,7 @@ fullnameOverride: ""
 
 # Trust X-Forwarded-For header for client IP detection
 # Set to true when running behind an ingress controller or L7 load balancer.
-# When ingress.enabled is true, this is automatically enabled.
+# Automatically enabled when ingress.enabled or gateway.enabled is true.
 # WARNING: Only enable this if gatekeeper is NOT directly exposed to the internet.
 # See README.md "Security Considerations" for details.
 trustXForwardedFor: false
@@ -24,12 +24,28 @@ tls:
   acmeEmail: "certs@example.com"
   cacheDir: "/var/cache/gatekeeper/certs"
 
-# Ingress configuration (recommended for multi-replica deployments)
+# ==============================================================================
+# ROUTING: Choose ONE of the following options for external traffic routing.
+# ==============================================================================
+#
+# Option 1: Ingress (traditional Kubernetes Ingress API)
+#   - Use when your cluster uses nginx-ingress, traefik in Ingress mode, etc.
+#   - Set ingress.enabled=true and configure className
+#   - For TLS, add cert-manager annotation and enable ingress.tls
+#
+# Option 2: Gateway API (newer Kubernetes Gateway API)
+#   - Use when your cluster uses Gateway API (Traefik Gateway, Istio, etc.)
+#   - Set gateway.enabled=true and configure gatewayName/gatewayNamespace
+#   - TLS is typically handled by the Gateway; cert-manager uses HTTP-01 solver
+#
+# Do NOT enable both ingress.enabled and gateway.enabled simultaneously.
+# ==============================================================================
+
+# Ingress configuration (Kubernetes Ingress API)
 # Hostnames are automatically derived from routes - no need to duplicate them here.
-# Use with cert-manager for automatic TLS certificate management.
 ingress:
   enabled: false
-  className: ""  # e.g., "nginx"
+  className: ""  # e.g., "nginx", "traefik"
   annotations: {}
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
   tls:
@@ -37,6 +53,20 @@ ingress:
     # Optional: use a single secret for all hosts. If not set, each host gets
     # its own secret named "{hostname}-tls" (e.g., webhooks-example-com-tls)
     secretName: ""
+
+# Gateway API configuration (Kubernetes Gateway API)
+# Use this when your cluster's cert-manager is configured with gatewayHTTPRoute solver.
+# Hostnames are automatically derived from routes - no need to duplicate them here.
+gateway:
+  enabled: false
+  # Name of the Gateway resource to attach HTTPRoutes to
+  gatewayName: ""  # e.g., "traefik-gateway"
+  # Namespace where the Gateway resource lives
+  gatewayNamespace: ""  # e.g., "traefik"
+  # Optional: specific listener section on the Gateway (leave empty for default)
+  sectionName: ""
+  # Annotations to add to HTTPRoute resources
+  annotations: {}
 
 # Metrics settings
 metrics:

@@ -1,0 +1,62 @@
+# Gatekeeper-relay values for tinypulse-dev cluster
+# Namespace: tiny-staging (or dedicated namespace)
+#
+# Deploy with:
+#   kubectl config use-context tinypulse-dev
+#   kubectl create secret generic gatekeeper-relay-secrets -n tiny-staging \
+#     --from-literal=RELAY_TOKEN_SLACK='<same-token-from-gatekeeperd>' \
+#     --from-literal=RELAY_TOKEN_MSTEAMS='<same-token-from-gatekeeperd>' \
+#     --from-literal=RELAY_TOKEN_OUTLOOK='<same-token-from-gatekeeperd>' \
+#     --from-literal=RELAY_TOKEN_GCAL='<same-token-from-gatekeeperd>'
+#   helm upgrade --install gatekeeper-relay charts/gatekeeper-relay -n tiny-staging \
+#     -f config/tinypulse-dev-relay.yaml
+#
+# IMPORTANT: The relay tokens must match the tokens configured in gatekeeperd.
+# Generate tokens once and use the same values in both clusters.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/tight-line/gatekeeper-relay
+  pullPolicy: IfNotPresent
+  # tag: "" uses appVersion from Chart.yaml
+
+# Use existing secret created manually (see deploy instructions above)
+existingSecret: "gatekeeper-relay-secrets"
+
+# Gatekeeperd server URL (any of the webhook hostnames works)
+server: "https://tp-slackhook-staging.cloud.ike.tools"
+
+# Max consecutive failures before pod restarts (allows k8s to handle recovery)
+maxConsecutiveFailures: 10
+
+# Relay channels - each channel polls for webhooks and forwards to local service
+channels:
+  # Slack webhooks -> slack-webhook-handler service
+  - name: slack
+    tokenKey: RELAY_TOKEN_SLACK
+    destination: "http://slack-webhook-handler.tiny-staging.svc.cluster.local:5000"
+
+  # MS Teams webhooks -> msteams-bot service
+  - name: msteams
+    tokenKey: RELAY_TOKEN_MSTEAMS
+    destination: "http://msteams-bot.tiny-staging.svc.cluster.local:3000"
+
+  # Outlook Calendar webhooks -> coach service
+  - name: outlook
+    tokenKey: RELAY_TOKEN_OUTLOOK
+    destination: "http://coach.tiny-staging.svc.cluster.local:3000"
+
+  # Google Calendar webhooks -> coach service
+  - name: gcal
+    tokenKey: RELAY_TOKEN_GCAL
+    destination: "http://coach.tiny-staging.svc.cluster.local:3000"
+
+# Resource limits (relay is lightweight)
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

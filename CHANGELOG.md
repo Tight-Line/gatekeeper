@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Gateway API (HTTPRoute) support in gatekeeperd Helm chart as alternative to Ingress
+- Example values files for ike-cloud-nonprod and tinypulse-dev deployments
+
 ## [0.1.3] - 2026-01-21
 
 ### Changed

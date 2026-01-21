@@ -43,7 +43,7 @@ spec:
                   name: {{ include "gatekeeperd.fullname" . }}-config
                   key: config.yaml
             - name: GATEKEEPERD_TRUST_X_FORWARDED_FOR
-              value: {{ or .Values.trustXForwardedFor .Values.ingress.enabled | quote }}
+              value: {{ or .Values.trustXForwardedFor .Values.ingress.enabled .Values.gateway.enabled | quote }}
           ports:
             {{- if .Values.tls.enabled }}
             - name: https
