@@ -309,9 +309,9 @@ Relay mode eliminates inbound firewall rules entirely. The relay client initiate
 
 ### Convoy
 
-Convoy (github.com/frain-dev/convoy) is an open-source webhook gateway with similar goals. It was the starting point for this project. However, Convoy is designed as a full webhook platform with event persistence, retry logic, and delivery tracking. It requires PostgreSQL, Redis, and a message queue.
+Convoy (github.com/frain-dev/convoy) is an open-source webhook gateway, but it solves the opposite problem: Convoy is for *sending* webhooks, not receiving them. It helps you deliver webhooks to your customers with retry logic, event persistence, and delivery tracking. If you are building a SaaS product that needs to notify customers via webhooks, Convoy is excellent.
 
-For our use case, we need a lightweight proxy, not a platform. We do not need to store events or manage retries. The backend services handle that. We just need to authenticate and forward.
+Gatekeeper solves the receiving side: validating and forwarding incoming webhooks from providers like Slack and GitHub to your internal services.
 
 ### API Gateways (Kong, Traefik)
 
@@ -328,6 +328,20 @@ Smee.io is a webhook relay service created by the Probot team for GitHub App dev
 The relay concept is similar to gatekeeper's relay mode, but Smee is a pure pass-through. It performs no signature verification, IP filtering, or payload validation. Anyone who discovers your channel URL can send arbitrary payloads to your application. Smee channels are also not authenticated, so webhook contents are visible to anyone with the channel ID.
 
 Smee is explicitly intended for development only and is hosted as a third-party service. Gatekeeper provides proper provider-specific signature verification, is self-hosted, and supports both development and production use cases.
+
+### Tunnel Services (ngrok, Cloudflare Tunnel, localtunnel)
+
+General-purpose tunnel services expose your localhost to the internet via a public URL. They are useful for development and testing, but they perform no webhook-specific validation. Any traffic that reaches the public URL is forwarded to your application.
+
+These tools solve network reachability but not authentication. You still need to verify signatures in your application code. Gatekeeper handles both: it provides network reachability (via relay mode) and authentication (via provider-specific verification) in one package.
+
+### Webhook Relay
+
+Webhook Relay (webhookrelay.com) is a commercial relay service with a self-hosted option. It can forward webhooks to private networks and provides a Lua scripting layer for custom logic.
+
+However, Webhook Relay does not include built-in provider-specific verification. To validate signatures, you must write custom Lua functions for each provider, implementing the correct header parsing, algorithm, and comparison logic yourself. This is similar to the API gateway approach: possible, but you end up reimplementing provider-specific verification from scratch.
+
+Gatekeeper provides built-in verifiers for each supported provider. You specify `type: slack` or `type: github` and the correct algorithm is applied automatically.
 
 ---
 
