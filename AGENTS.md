@@ -147,6 +147,22 @@ ip_allowlists:
 - K8s manifests: k8s/
 - Helm charts: charts/gatekeeperd/, charts/gatekeeper-relay/
 
+## Config Directory Policy
+
+The `config/` directory contains example and template files. **Deployment-specific config files should NOT be tracked in git.**
+
+**Tracked files (examples/templates):**
+- `config/example.yaml` - Example gatekeeperd config
+- `config/relay-client-example.yaml` - Example relay client config
+- `config/minikube-*.yaml` - Local development templates
+- `config/test*.yaml` - Test fixtures
+
+**Not tracked (deployment-specific):**
+- Any file with environment names (e.g., `*-prod-*.yaml`, `*-staging-*.yaml`)
+- Cluster-specific configs (e.g., `ike-cloud-nonprod-*.yaml`, `tinypulse-dev-*.yaml`)
+
+When creating deployment configs, store them locally or in a separate deployment repo. Do not commit them to this repository.
+
 ## Current Implementation Status
 
 See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for current status and planned work.
