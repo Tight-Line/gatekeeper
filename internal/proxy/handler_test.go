@@ -1952,6 +1952,258 @@ func TestHandler_ValidationWithVerification(t *testing.T) {
 	}
 }
 
+func TestHandler_SlackURLVerification(t *testing.T) {
+	// Backend should NOT be called for URL verification challenges
+	backendCalled := false
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		backendCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/slack-webhook",
+				Verifier:    "slack",
+				Destination: backend.URL,
+			},
+			{
+				Hostname:    "test.com",
+				Path:        "/noop-webhook",
+				Verifier:    "noop",
+				Destination: backend.URL,
+			},
+			{
+				Hostname:    "test.com",
+				Path:        "/no-verifier",
+				Destination: backend.URL,
+			},
+		},
+		Verifiers: map[string]config.VerifierConfig{
+			"slack": {
+				Type:          "slack",
+				SigningSecret: "test-secret",
+			},
+			"noop": {
+				Type: "noop",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	signRequest := func(body []byte) func(r *http.Request) {
+		return func(r *http.Request) {
+			timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+			sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
+			mac := hmac.New(sha256.New, []byte("test-secret"))
+			mac.Write([]byte(sigBase))
+			signature := "v0=" + hex.EncodeToString(mac.Sum(nil))
+			r.Header.Set("X-Slack-Request-Timestamp", timestamp)
+			r.Header.Set("X-Slack-Signature", signature)
+		}
+	}
+
+	tests := []struct {
+		name             string
+		path             string
+		body             string
+		setupHeaders     func(r *http.Request)
+		expectedStatus   int
+		expectedBody     string
+		backendShouldRun bool
+	}{
+		{
+			name:             "URL verification challenge is handled directly",
+			path:             "/slack-webhook",
+			body:             `{"type":"url_verification","challenge":"test-challenge-123"}`,
+			setupHeaders:     signRequest([]byte(`{"type":"url_verification","challenge":"test-challenge-123"}`)),
+			expectedStatus:   http.StatusOK,
+			expectedBody:     "test-challenge-123",
+			backendShouldRun: false,
+		},
+		{
+			name:             "regular Slack event is forwarded",
+			path:             "/slack-webhook",
+			body:             `{"type":"event_callback","event":{"type":"message"}}`,
+			setupHeaders:     signRequest([]byte(`{"type":"event_callback","event":{"type":"message"}}`)),
+			expectedStatus:   http.StatusOK,
+			backendShouldRun: true,
+		},
+		{
+			name:             "URL verification on non-Slack route is forwarded",
+			path:             "/noop-webhook",
+			body:             `{"type":"url_verification","challenge":"test-challenge"}`,
+			expectedStatus:   http.StatusOK,
+			backendShouldRun: true,
+		},
+		{
+			name:             "URL verification on route without verifier is forwarded",
+			path:             "/no-verifier",
+			body:             `{"type":"url_verification","challenge":"test-challenge"}`,
+			expectedStatus:   http.StatusOK,
+			backendShouldRun: true,
+		},
+		{
+			name:             "invalid JSON is forwarded (not treated as URL verification)",
+			path:             "/slack-webhook",
+			body:             `not json`,
+			setupHeaders:     signRequest([]byte(`not json`)),
+			expectedStatus:   http.StatusOK,
+			backendShouldRun: true,
+		},
+		{
+			name:             "missing challenge field is forwarded",
+			path:             "/slack-webhook",
+			body:             `{"type":"url_verification"}`,
+			setupHeaders:     signRequest([]byte(`{"type":"url_verification"}`)),
+			expectedStatus:   http.StatusOK,
+			backendShouldRun: true,
+		},
+		{
+			name:             "empty challenge is forwarded",
+			path:             "/slack-webhook",
+			body:             `{"type":"url_verification","challenge":""}`,
+			setupHeaders:     signRequest([]byte(`{"type":"url_verification","challenge":""}`)),
+			expectedStatus:   http.StatusOK,
+			backendShouldRun: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			backendCalled = false
+
+			req := httptest.NewRequest(http.MethodPost, "https://test.com"+tc.path, bytes.NewReader([]byte(tc.body)))
+			req.Host = "test.com"
+			req.RemoteAddr = "127.0.0.1:12345"
+
+			if tc.setupHeaders != nil {
+				tc.setupHeaders(req)
+			}
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tc.expectedStatus {
+				t.Errorf("expected status %d, got %d (body: %s)", tc.expectedStatus, rr.Code, rr.Body.String())
+			}
+
+			if tc.expectedBody != "" && rr.Body.String() != tc.expectedBody {
+				t.Errorf("expected body %q, got %q", tc.expectedBody, rr.Body.String())
+			}
+
+			if backendCalled != tc.backendShouldRun {
+				if tc.backendShouldRun {
+					t.Error("expected backend to be called, but it wasn't")
+				} else {
+					t.Error("expected backend NOT to be called, but it was")
+				}
+			}
+		})
+	}
+}
+
+func TestHandler_SlackURLVerification_Relay(t *testing.T) {
+	// Test that URL verification is handled directly even in relay mode
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:   "test.com",
+				Path:       "/webhook",
+				Verifier:   "slack",
+				RelayToken: "test-token",
+			},
+		},
+		Verifiers: map[string]config.VerifierConfig{
+			"slack": {
+				Type:          "slack",
+				SigningSecret: "test-secret",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
+
+	// Setup relay manager but DON'T start polling
+	// This simulates relay mode where there might be latency or no client connected
+	rm := relay.NewManager()
+	rm.RegisterToken("test-token")
+	handler.SetRelayManager(rm)
+
+	// Send URL verification request
+	body := []byte(`{"type":"url_verification","challenge":"relay-test-challenge"}`)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
+	mac := hmac.New(sha256.New, []byte("test-secret"))
+	mac.Write([]byte(sigBase))
+	signature := "v0=" + hex.EncodeToString(mac.Sum(nil))
+
+	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
+	req.Host = "test.com"
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+	req.Header.Set("X-Slack-Signature", signature)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Should respond immediately with challenge, NOT 503 (no relay client)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	if rr.Body.String() != "relay-test-challenge" {
+		t.Errorf("expected body 'relay-test-challenge', got %q", rr.Body.String())
+	}
+}
+
+func TestHandler_VerifierTypesMap(t *testing.T) {
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+		},
+		Verifiers: map[string]config.VerifierConfig{
+			"my-slack":   {Type: "slack", SigningSecret: "secret"},
+			"my-github":  {Type: "github", Secret: "secret"},
+			"my-shopify": {Type: "shopify", Secret: "secret"},
+			"my-noop":    {Type: "noop"},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	// Verify verifier types are tracked
+	if handler.verifierTypes["my-slack"] != "slack" {
+		t.Errorf("expected verifierTypes['my-slack']='slack', got %q", handler.verifierTypes["my-slack"])
+	}
+	if handler.verifierTypes["my-github"] != "github" {
+		t.Errorf("expected verifierTypes['my-github']='github', got %q", handler.verifierTypes["my-github"])
+	}
+	if handler.verifierTypes["my-shopify"] != "shopify" {
+		t.Errorf("expected verifierTypes['my-shopify']='shopify', got %q", handler.verifierTypes["my-shopify"])
+	}
+	if handler.verifierTypes["my-noop"] != "noop" {
+		t.Errorf("expected verifierTypes['my-noop']='noop', got %q", handler.verifierTypes["my-noop"])
+	}
+}
+
 func TestHandler_WriteRelayResponse_StripsHopByHopHeaders(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{

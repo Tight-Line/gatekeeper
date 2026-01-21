@@ -1,3 +1,12 @@
 test-values-gatekeeperd.yaml
 test-values-relay.yaml
 coverage.out
+
+# Deployment-specific config files (not tracked)
+# Keep only example/template files in config/
+config/*
+!config/example.yaml
+!config/relay-client-example.yaml
+!config/minikube-gatekeeperd.yaml
+!config/minikube-relay.yaml
+!config/test*.yaml

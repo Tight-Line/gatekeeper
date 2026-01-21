@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -42,6 +43,7 @@ type HandlerOptions struct {
 type Handler struct {
 	routes             []config.RouteConfig
 	verifiers          map[string]verifier.Verifier
+	verifierTypes      map[string]string // verifier name -> type (e.g., "slack", "github")
 	validators         map[string]validator.Validator
 	filters            *ipfilter.FilterSet
 	relay              *relay.Manager
@@ -63,6 +65,7 @@ func NewHandler(cfg *config.Config, filters *ipfilter.FilterSet, logger *slog.Lo
 	h := &Handler{
 		routes:             cfg.Routes,
 		verifiers:          make(map[string]verifier.Verifier),
+		verifierTypes:      make(map[string]string),
 		validators:         make(map[string]validator.Validator),
 		filters:            filters,
 		logger:             logger,
@@ -78,6 +81,7 @@ func NewHandler(cfg *config.Config, filters *ipfilter.FilterSet, logger *slog.Lo
 			return nil, err
 		}
 		h.verifiers[name] = v
+		h.verifierTypes[name] = vc.Type
 	}
 
 	// Build validators from config
@@ -172,6 +176,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !h.verifyRequest(w, r, ctx) {
+		return
+	}
+
+	// Handle Slack URL verification challenge directly (no forwarding needed)
+	// This allows setup of Slack webhooks even in relay mode where latency might cause timeout
+	if h.handleSlackURLVerification(w, r, ctx) {
 		return
 	}
 
@@ -280,6 +290,50 @@ func (h *Handler) verifyRequest(w http.ResponseWriter, r *http.Request, ctx *req
 		return false
 	}
 
+	return true
+}
+
+// slackURLVerification represents Slack's URL verification challenge request
+type slackURLVerification struct {
+	Type      string `json:"type"`
+	Challenge string `json:"challenge"`
+}
+
+// handleSlackURLVerification checks if this is a Slack URL verification challenge
+// and responds directly without forwarding. This is necessary because:
+// 1. Slack requires a response within 3 seconds
+// 2. Relay mode may have latency that exceeds this timeout
+// 3. The backend doesn't need to handle this - it's just a setup handshake
+//
+// Returns true if the request was handled (caller should return), false otherwise.
+func (h *Handler) handleSlackURLVerification(w http.ResponseWriter, r *http.Request, ctx *requestContext) bool {
+	// Only handle for Slack verifier routes
+	if ctx.route.Verifier == "" || h.verifierTypes[ctx.route.Verifier] != "slack" {
+		return false
+	}
+
+	// Try to parse as URL verification request
+	var req slackURLVerification
+	if err := json.Unmarshal(ctx.body, &req); err != nil {
+		return false
+	}
+
+	// Check if this is a URL verification challenge
+	if req.Type != "url_verification" || req.Challenge == "" {
+		return false
+	}
+
+	// Respond with the challenge directly
+	h.logger.Info("handling Slack URL verification challenge",
+		"hostname", ctx.hostname,
+		"path", r.URL.Path,
+	)
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(req.Challenge))
+
+	metrics.RecordRequest(ctx.hostname, ctx.route.Path, "200", time.Since(ctx.start).Seconds())
 	return true
 }
 

@@ -11,7 +11,7 @@ fullnameOverride: ""
 
 # Trust X-Forwarded-For header for client IP detection
 # Set to true when running behind an ingress controller or L7 load balancer.
-# When ingress.enabled is true, this is automatically enabled.
+# Automatically enabled when ingress.enabled or gateway.enabled is true.
 # WARNING: Only enable this if gatekeeper is NOT directly exposed to the internet.
 # See README.md "Security Considerations" for details.
 trustXForwardedFor: false
@@ -24,12 +24,28 @@ tls:
   acmeEmail: "certs@example.com"
   cacheDir: "/var/cache/gatekeeper/certs"
 
-# Ingress configuration (recommended for multi-replica deployments)
+# ==============================================================================
+# ROUTING: Choose ONE of the following options for external traffic routing.
+# ==============================================================================
+#
+# Option 1: Ingress (traditional Kubernetes Ingress API)
+#   - Use when your cluster uses nginx-ingress, traefik in Ingress mode, etc.
+#   - Set ingress.enabled=true and configure className
+#   - For TLS, add cert-manager annotation and enable ingress.tls
+#
+# Option 2: Gateway API (newer Kubernetes Gateway API)
+#   - Use when your cluster uses Gateway API (Traefik Gateway, Istio, etc.)
+#   - Set gateway.enabled=true and configure gatewayName/gatewayNamespace
+#   - TLS is typically handled by the Gateway; cert-manager uses HTTP-01 solver
+#
+# Do NOT enable both ingress.enabled and gateway.enabled simultaneously.
+# ==============================================================================
+
+# Ingress configuration (Kubernetes Ingress API)
 # Hostnames are automatically derived from routes - no need to duplicate them here.
-# Use with cert-manager for automatic TLS certificate management.
 ingress:
   enabled: false
-  className: ""  # e.g., "nginx"
+  className: ""  # e.g., "nginx", "traefik"
   annotations: {}
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
   tls:
@@ -37,6 +53,20 @@ ingress:
     # Optional: use a single secret for all hosts. If not set, each host gets
     # its own secret named "{hostname}-tls" (e.g., webhooks-example-com-tls)
     secretName: ""
+
+# Gateway API configuration (Kubernetes Gateway API)
+# Use this when your cluster's cert-manager is configured with gatewayHTTPRoute solver.
+# Hostnames are automatically derived from routes - no need to duplicate them here.
+gateway:
+  enabled: false
+  # Name of the Gateway resource to attach HTTPRoutes to
+  gatewayName: ""  # e.g., "traefik-gateway"
+  # Namespace where the Gateway resource lives
+  gatewayNamespace: ""  # e.g., "traefik"
+  # Optional: specific listener section on the Gateway (leave empty for default)
+  sectionName: ""
+  # Annotations to add to HTTPRoute resources
+  annotations: {}
 
 # Metrics settings
 metrics:
@@ -47,20 +77,89 @@ metrics:
 logging:
   level: info
 
-# IP allowlists for source validation
+# ==============================================================================
+# IP ALLOWLISTS: Predefined lists for common webhook providers
+# ==============================================================================
+#
+# Each allowlist can use either:
+#   - fetchUrl + fetchJq: Dynamic list fetched from URL, parsed with jq
+#   - cidrs: Static list of CIDR ranges
+#
+# Predefined lists included below:
+#   - aws:              All AWS IP ranges (Slack webhooks originate from AWS)
+#   - google:           All Google IP ranges (includes GCP and Google services)
+#   - google-cloud:     Google Cloud Platform only
+#   - azure-bot:        Azure Bot Service IPs (MS Teams webhooks)
+#   - github:           GitHub webhook source IPs
+#   - salesforce:       Salesforce outbound IPs (static, verify at salesforce.com)
+#   - internal-only:    RFC 1918 private ranges
+#
+# To use an allowlist on a route, reference it by name:
+#   routes:
+#     - hostname: example.com
+#       ipAllowlist: aws
+#       ...
+# ==============================================================================
+
 ipAllowlists:
+  # AWS IP ranges - used by Slack and many other services
+  # Source: https://ip-ranges.amazonaws.com/ip-ranges.json (official)
   aws:
     fetchUrl: "https://ip-ranges.amazonaws.com/ip-ranges.json"
     fetchJq: ".prefixes[].ip_prefix"
     refreshInterval: 24h
-  google-cloud:
-    fetchUrl: "https://www.gstatic.com/ipranges/cloud.json"
-    fetchJq: ".prefixes[].ipv4Prefix"
-    refreshInterval: 24h
+
+  # Google IP ranges - all Google services including GCP, Workspace, etc.
+  # Source: https://www.gstatic.com/ipranges/goog.json (official)
   google:
     fetchUrl: "https://www.gstatic.com/ipranges/goog.json"
     fetchJq: ".prefixes[].ipv4Prefix"
     refreshInterval: 24h
+
+  # Google Cloud Platform only (subset of google)
+  # Source: https://www.gstatic.com/ipranges/cloud.json (official)
+  google-cloud:
+    fetchUrl: "https://www.gstatic.com/ipranges/cloud.json"
+    fetchJq: ".prefixes[].ipv4Prefix"
+    refreshInterval: 24h
+
+  # Azure Bot Service - MS Teams webhook source IPs
+  # Source: maciejporebski/azure-ips (mirrors official Microsoft data)
+  # Note: Microsoft doesn't provide stable URLs; this repo tracks their weekly releases
+  azure-bot:
+    fetchUrl: "https://raw.githubusercontent.com/maciejporebski/azure-ips/refs/heads/main/serviceTags/AzureBotService/ipv4.json"
+    fetchJq: ".[]"
+    refreshInterval: 24h
+
+  # GitHub webhook source IPs
+  # Source: https://api.github.com/meta (official)
+  github:
+    fetchUrl: "https://api.github.com/meta"
+    fetchJq: ".hooks[]"
+    refreshInterval: 24h
+
+  # Salesforce outbound IPs
+  # Source: https://help.salesforce.com/s/articleView?id=000384438 (static, no API)
+  # Note: Salesforce doesn't provide a JSON API; verify these at salesforce.com
+  # Last verified: 2026-01
+  salesforce:
+    cidrs:
+      - "13.108.0.0/14"
+      - "136.146.0.0/15"
+      - "128.17.0.0/16"
+      - "128.245.0.0/16"
+      - "157.232.0.0/16"
+      - "159.92.0.0/16"
+      - "160.8.0.0/16"
+      - "161.71.0.0/16"
+      - "145.224.128.0/17"
+      - "104.161.128.0/17"
+      - "185.79.140.0/22"
+      - "182.50.76.0/22"
+      - "202.129.242.0/23"
+      - "96.43.144.0/20"
+
+  # RFC 1918 private ranges - for internal/testing use
   internal-only:
     cidrs:
       - "10.0.0.0/8"

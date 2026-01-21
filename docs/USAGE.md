@@ -68,6 +68,11 @@ verifiers:
     signing_secret: "${SLACK_SIGNING_SECRET}"
     max_timestamp_age: 5m
 
+# Note: Gatekeeper automatically handles Slack URL verification challenges.
+# When Slack sends a url_verification request during webhook setup,
+# gatekeeper responds immediately with the challenge - your backend
+# does not need to handle this. This works in both direct and relay modes.
+
 validators:
   slack-event:
     type: json_schema
@@ -344,7 +349,7 @@ After gathering this information, it generates:
 
 | Provider | Verifier Type | Setup Guidance |
 |----------|---------------|----------------|
-| Slack | `slack` | Events API, signing secret location |
+| Slack | `slack` | Events API, signing secret location. URL verification handled automatically. |
 | GitHub | `github` | Repository/org webhook setup |
 | Shopify | `shopify` | Admin panel webhook configuration |
 | Google Calendar | `api_key` | Calendar API watch requests |
