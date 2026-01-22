@@ -36,11 +36,15 @@ func run() error {
 	listenAddr := flag.String("listen", "", "Address to listen on (HTTP mode, no TLS)")
 	enableTLS := flag.Bool("tls", false, "Enable ACME TLS (requires ports 80 and 443)")
 	trustXFF := flag.Bool("trust-x-forwarded-for", false, "Trust X-Forwarded-For header for client IP (set when behind ingress/proxy)")
+	redisURI := flag.String("redis-uri", "", "Redis/Valkey URI for multi-replica relay (e.g., redis://localhost:6379)")
 	flag.Parse()
 
-	// Environment variable can also enable trust-x-forwarded-for
+	// Environment variables override flags
 	if os.Getenv("GATEKEEPERD_TRUST_X_FORWARDED_FOR") == "true" {
 		*trustXFF = true
+	}
+	if envRedisURI := os.Getenv("GATEKEEPERD_REDIS_URI"); envRedisURI != "" {
+		*redisURI = envRedisURI
 	}
 
 	// Setup structured logging
@@ -84,7 +88,10 @@ func run() error {
 	}
 
 	// Setup relay manager if any routes use relay tokens
-	relayHandler, cleanup := setupRelayManager(cfg, handler, logger)
+	relayHandler, cleanup, err := setupRelayManager(cfg, handler, logger, *redisURI)
+	if err != nil {
+		return fmt.Errorf("setting up relay: %w", err)
+	}
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -142,23 +149,85 @@ func setupSignalHandler(logger *slog.Logger) (context.Context, context.CancelFun
 }
 
 // setupRelayManager configures relay if any routes use relay tokens
-// Returns the relay handler (or nil) and a cleanup function
-func setupRelayManager(cfg *config.Config, handler *proxy.Handler, logger *slog.Logger) (relayHandler *relay.Handler, cleanup func()) {
+// Returns the relay handler (or nil), a cleanup function, and any error
+func setupRelayManager(cfg *config.Config, handler *proxy.Handler, logger *slog.Logger, redisURI string) (relayHandler *relay.Handler, cleanup func(), err error) {
 	relayTokens := cfg.GetRelayTokens()
 	if len(relayTokens) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	relayManager := relay.NewManager()
+	var relayManager relay.Manager
+	if redisURI != "" {
+		// Redis/Valkey mode for multi-replica support
+		redisManager, err := relay.NewRedisManager(redisURI)
+		if err != nil {
+			return nil, nil, fmt.Errorf("creating Redis relay manager: %w", err)
+		}
+		relayManager = redisManager
+		logger.Info("relay enabled (Redis mode)", "tokens", len(relayTokens), "uri", sanitizeRedisURI(redisURI))
+	} else {
+		// In-memory mode for single replica
+		relayManager = relay.NewMemoryManager()
+		logger.Info("relay enabled (in-memory mode)", "tokens", len(relayTokens))
+	}
+
 	for _, token := range relayTokens {
 		relayManager.RegisterToken(token)
 	}
 	handler.SetRelayManager(relayManager)
 	relayHandler = relay.NewHandler(relayManager, logger)
 	cleanup = relayManager.Shutdown
-	logger.Info("relay enabled", "tokens", len(relayTokens))
 
-	return
+	return relayHandler, cleanup, nil
+}
+
+// sanitizeRedisURI removes password from URI for logging
+func sanitizeRedisURI(uri string) string {
+	// Simple sanitization: mask password if present
+	// Format: redis://[user:password@]host:port
+	if idx := findPasswordEnd(uri); idx > 0 {
+		// Find the start of password (after "://[user:]")
+		start := findPasswordStart(uri)
+		if start > 0 && start < idx {
+			return uri[:start] + "***" + uri[idx:]
+		}
+	}
+	return uri
+}
+
+// findPasswordStart finds the start of password in a Redis URI
+func findPasswordStart(uri string) int {
+	// Look for :// then find : after it (password starts after :)
+	schemeEnd := 0
+	for i := 0; i < len(uri)-2; i++ {
+		if uri[i:i+3] == "://" {
+			schemeEnd = i + 3
+			break
+		}
+	}
+	if schemeEnd == 0 {
+		return -1
+	}
+	// Find : which separates user from password, or password only (starts with :)
+	for i := schemeEnd; i < len(uri); i++ {
+		if uri[i] == '@' {
+			return -1 // No password
+		}
+		if uri[i] == ':' {
+			return i + 1 // Password starts after :
+		}
+	}
+	return -1
+}
+
+// findPasswordEnd finds the @ that ends the password
+func findPasswordEnd(uri string) int {
+	for i := 0; i < len(uri); i++ {
+		if uri[i] == '@' {
+			return i
+		}
+	}
+	return -1
 }
 
 // startMetricsServer starts the metrics server if configured
