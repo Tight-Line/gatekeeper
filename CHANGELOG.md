@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-01-22
+
 ### Added
 - `make check` target for pre-release verification (lint, 100% coverage, build)
 - `make test-coverage-check` target that fails if coverage is below 100%
