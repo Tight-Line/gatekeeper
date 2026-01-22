@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -45,10 +46,17 @@ type Poller struct {
 	minBackoff             time.Duration
 	maxBackoff             time.Duration
 	maxConsecutiveFailures int
+
+	// Worker pool settings
+	workers   int
+	webhookCh chan *Webhook
 }
 
 // NewPoller creates a new poller for a channel
-func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logger *slog.Logger, maxConsecutiveFailures int) *Poller {
+func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logger *slog.Logger, maxConsecutiveFailures, workers int) *Poller {
+	if workers <= 0 {
+		workers = 1
+	}
 	return &Poller{
 		serverURL:              serverURL,
 		token:                  token,
@@ -56,6 +64,7 @@ func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logge
 		forwarder:              forwarder,
 		logger:                 logger,
 		maxConsecutiveFailures: maxConsecutiveFailures,
+		workers:                workers,
 		client: &http.Client{
 			Timeout: 60 * time.Second, // Longer than server poll timeout
 		},
@@ -67,6 +76,40 @@ func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logge
 // Run starts the polling loop, blocking until context is canceled or max consecutive failures is reached.
 // Returns nil on graceful shutdown, ErrMaxConsecutiveFailures if failure limit exceeded.
 func (p *Poller) Run(ctx context.Context) error {
+	// Create webhook channel for worker pool
+	p.webhookCh = make(chan *Webhook, p.workers)
+
+	// Start worker pool
+	var wg sync.WaitGroup
+	for i := 0; i < p.workers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			p.worker(ctx, workerID)
+		}(i)
+	}
+
+	p.logger.Info("started worker pool",
+		"channel", p.channelName,
+		"workers", p.workers,
+	)
+
+	// Run the poll loop
+	err := p.pollLoop(ctx)
+
+	// Close channel and wait for workers to finish
+	close(p.webhookCh)
+	wg.Wait()
+
+	p.logger.Info("poller stopped",
+		"channel", p.channelName,
+	)
+
+	return err
+}
+
+// pollLoop handles the main polling loop
+func (p *Poller) pollLoop(ctx context.Context) error {
 	backoff := p.minBackoff
 	consecutiveFailures := 0
 	connected := false
@@ -74,7 +117,6 @@ func (p *Poller) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			p.logger.Info("poller stopping", "channel", p.channelName)
 			return nil
 		default:
 		}
@@ -105,8 +147,21 @@ func (p *Poller) Run(ctx context.Context) error {
 		consecutiveFailures = 0
 
 		if webhook != nil {
-			p.handleWebhook(ctx, webhook)
+			// Dispatch to worker pool
+			select {
+			case p.webhookCh <- webhook:
+				// Webhook dispatched to worker
+			case <-ctx.Done():
+				return nil
+			}
 		}
+	}
+}
+
+// worker processes webhooks from the channel
+func (p *Poller) worker(ctx context.Context, workerID int) {
+	for webhook := range p.webhookCh {
+		p.handleWebhook(ctx, webhook, workerID)
 	}
 }
 
@@ -141,11 +196,12 @@ func (p *Poller) handlePollError(ctx context.Context, err error, backoff *time.D
 	return false, nil
 }
 
-func (p *Poller) handleWebhook(ctx context.Context, webhook *Webhook) {
+func (p *Poller) handleWebhook(ctx context.Context, webhook *Webhook, workerID int) {
 	resp, err := p.forwarder.Forward(ctx, webhook)
 	if err != nil {
 		p.logger.Error("forward error",
 			"channel", p.channelName,
+			"worker", workerID,
 			"webhook_id", webhook.ID,
 			"error", err,
 		)
@@ -156,6 +212,7 @@ func (p *Poller) handleWebhook(ctx context.Context, webhook *Webhook) {
 	if err := p.sendResponse(ctx, resp); err != nil {
 		p.logger.Error("failed to send response",
 			"channel", p.channelName,
+			"worker", workerID,
 			"webhook_id", webhook.ID,
 			"error", err,
 		)

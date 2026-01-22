@@ -26,7 +26,7 @@ func NewClient(cfg *Config, logger *slog.Logger) *Client {
 	// Create pollers for each channel
 	for _, ch := range cfg.Channels {
 		forwarder := NewForwarder(ch.Destination, ch.Name, logger)
-		poller := NewPoller(cfg.Server, ch.Token, ch.Name, forwarder, logger, maxFailures)
+		poller := NewPoller(cfg.Server, ch.Token, ch.Name, forwarder, logger, maxFailures, ch.GetWorkers())
 		c.pollers = append(c.pollers, poller)
 	}
 

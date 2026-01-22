@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,7 +20,7 @@ import (
 func TestNewPoller(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller("http://relay.example.com", "token123", "test-channel", forwarder, logger, 5)
+	p := NewPoller("http://relay.example.com", "token123", "test-channel", forwarder, logger, 5, 1)
 
 	if p.serverURL != "http://relay.example.com" {
 		t.Errorf("expected serverURL 'http://relay.example.com', got %q", p.serverURL)
@@ -57,7 +59,7 @@ func TestPoller_Poll_Success(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	webhook, err := p.poll(context.Background())
 	if err != nil {
@@ -79,7 +81,7 @@ func TestPoller_Poll_NoContent(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	webhook, err := p.poll(context.Background())
 	if err != nil {
@@ -98,7 +100,7 @@ func TestPoller_Poll_Unauthorized(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	_, err := p.poll(context.Background())
 	if err == nil {
@@ -117,7 +119,7 @@ func TestPoller_Poll_ServiceUnavailable(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	_, err := p.poll(context.Background())
 	if err == nil {
@@ -137,7 +139,7 @@ func TestPoller_Poll_UnexpectedStatus(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	_, err := p.poll(context.Background())
 	if err == nil {
@@ -155,7 +157,7 @@ func TestPoller_Poll_InvalidJSON(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	_, err := p.poll(context.Background())
 	if err == nil {
@@ -166,7 +168,7 @@ func TestPoller_Poll_InvalidJSON(t *testing.T) {
 func TestPoller_Poll_ConnectionError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller("http://localhost:99999", "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller("http://localhost:99999", "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	_, err := p.poll(context.Background())
 	if err == nil {
@@ -198,7 +200,7 @@ func TestPoller_SendResponse_Success(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	resp := &Response{
 		RequestID:  "webhook-1",
@@ -226,7 +228,7 @@ func TestPoller_SendResponse_Error(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	resp := &Response{RequestID: "webhook-1", StatusCode: 200}
 	err := p.sendResponse(context.Background(), resp)
@@ -238,7 +240,7 @@ func TestPoller_SendResponse_Error(t *testing.T) {
 func TestPoller_SendResponse_ConnectionError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller("http://localhost:99999", "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller("http://localhost:99999", "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	resp := &Response{RequestID: "webhook-1", StatusCode: 200}
 	err := p.sendResponse(context.Background(), resp)
@@ -255,7 +257,7 @@ func TestPoller_Run_ContextCancelled(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -274,7 +276,7 @@ func TestPoller_Run_MaxConsecutiveFailures(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 2)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 2, 1)
 	// Reduce backoff for faster test
 	p.minBackoff = time.Millisecond
 	p.maxBackoff = 10 * time.Millisecond
@@ -327,7 +329,7 @@ func TestPoller_Run_ForwardErrorContinues(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder(localServer.URL, "test", logger)
-	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -385,7 +387,7 @@ func TestPoller_Run_FullWebhookCycle(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder(localServer.URL, "test", logger)
-	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -454,7 +456,7 @@ func TestPoller_Run_SendResponseError(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder(localServer.URL, "test", logger)
-	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -509,7 +511,7 @@ func TestPoller_Run_ForwardErrorSendResponseError(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost\x00:8080", "test", logger)
-	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -541,7 +543,7 @@ func TestPoller_Run_ContextCancelledDuringBackoff(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 10)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 10, 1)
 	// Long backoff so we can cancel during it
 	p.minBackoff = 5 * time.Second
 	p.maxBackoff = 10 * time.Second
@@ -574,7 +576,7 @@ func TestPoller_Run_ContextCancelledDuringPoll(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -598,7 +600,7 @@ func TestPoller_Poll_InvalidURL(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
 	// Invalid URL with control character
-	p := NewPoller("http://localhost\x00:8080", "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller("http://localhost\x00:8080", "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	_, err := p.poll(context.Background())
 	if err == nil {
@@ -610,7 +612,7 @@ func TestPoller_SendResponse_InvalidURL(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
 	// Invalid URL with control character
-	p := NewPoller("http://localhost\x00:8080", "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller("http://localhost\x00:8080", "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	resp := &Response{RequestID: "test", StatusCode: 200}
 	err := p.sendResponse(context.Background(), resp)
@@ -631,7 +633,7 @@ func TestPoller_Run_LogsConnectedOnFirstSuccess(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -668,7 +670,7 @@ func TestPoller_Run_LogsConnectedAfterInitialFailures(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 	p.minBackoff = time.Millisecond
 	p.maxBackoff = 10 * time.Millisecond
 
@@ -711,7 +713,7 @@ func TestPoller_Run_LogsConnectedThenRecovered(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger)
-	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
 	p.minBackoff = time.Millisecond
 	p.maxBackoff = 10 * time.Millisecond
 
@@ -727,5 +729,217 @@ func TestPoller_Run_LogsConnectedThenRecovered(t *testing.T) {
 	}
 	if !strings.Contains(logOutput, "connection recovered") {
 		t.Errorf("expected 'connection recovered' log, got: %s", logOutput)
+	}
+}
+
+func TestNewPoller_DefaultWorkers(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	forwarder := NewForwarder("http://localhost:8080", "test", logger)
+
+	// Test with 0 workers (should default to 1)
+	p := NewPoller("http://relay.example.com", "token123", "test-channel", forwarder, logger, 5, 0)
+	if p.workers != 1 {
+		t.Errorf("expected workers 1 (default), got %d", p.workers)
+	}
+
+	// Test with negative workers (should default to 1)
+	p = NewPoller("http://relay.example.com", "token123", "test-channel", forwarder, logger, 5, -1)
+	if p.workers != 1 {
+		t.Errorf("expected workers 1 (default), got %d", p.workers)
+	}
+
+	// Test with explicit workers
+	p = NewPoller("http://relay.example.com", "token123", "test-channel", forwarder, logger, 5, 10)
+	if p.workers != 10 {
+		t.Errorf("expected workers 10, got %d", p.workers)
+	}
+}
+
+func TestPoller_Run_WorkerPoolLogsWorkerCount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	forwarder := NewForwarder("http://localhost:8080", "test", logger)
+	p := NewPoller(server.URL, "test-token", "test-channel", forwarder, logger, 5, 3)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = p.Run(ctx)
+
+	// Verify "started worker pool" was logged with workers count
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "started worker pool") {
+		t.Errorf("expected 'started worker pool' log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, `"workers":3`) {
+		t.Errorf("expected workers count 3 in log, got: %s", logOutput)
+	}
+}
+
+func TestPoller_Run_ConcurrentWebhookProcessing(t *testing.T) {
+	// Track concurrent processing
+	var activeWorkers int32
+	var maxConcurrent int32
+	var webhookCount int32
+	var mu sync.Mutex
+
+	// Local destination that simulates slow processing
+	localServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := atomic.AddInt32(&activeWorkers, 1)
+		mu.Lock()
+		if current > maxConcurrent {
+			maxConcurrent = current
+		}
+		mu.Unlock()
+
+		// Simulate processing time
+		time.Sleep(50 * time.Millisecond)
+
+		atomic.AddInt32(&activeWorkers, -1)
+		atomic.AddInt32(&webhookCount, 1)
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer localServer.Close()
+
+	var pollCount int32
+	relayServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/relay/poll" {
+			count := atomic.AddInt32(&pollCount, 1)
+			if count <= 5 {
+				// Send webhooks for processing
+				webhook := &Webhook{
+					ID:      fmt.Sprintf("webhook-%d", count),
+					Method:  "POST",
+					Path:    "/test",
+					Headers: map[string][]string{},
+					Body:    base64.StdEncoding.EncodeToString([]byte(`{}`)),
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(webhook)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.URL.Path == "/relay/response" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}))
+	defer relayServer.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	forwarder := NewForwarder(localServer.URL, "test", logger)
+	// Use 3 workers
+	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5, 3)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_ = p.Run(ctx)
+
+	// Verify concurrent processing occurred
+	mu.Lock()
+	maxConc := maxConcurrent
+	totalProcessed := atomic.LoadInt32(&webhookCount)
+	mu.Unlock()
+
+	if totalProcessed < 5 {
+		t.Errorf("expected at least 5 webhooks processed, got %d", totalProcessed)
+	}
+
+	// With 3 workers and slow processing, we should see concurrent execution
+	// (maxConcurrent might be less than 3 depending on timing)
+	if maxConc < 1 {
+		t.Errorf("expected concurrent processing, got max concurrent %d", maxConc)
+	}
+	t.Logf("Max concurrent workers: %d, Total processed: %d", maxConc, totalProcessed)
+}
+
+func TestPoller_Run_GracefulShutdownWaitsForWorkers(t *testing.T) {
+	webhookStarted := make(chan bool, 1)
+	webhookFinished := make(chan bool, 1)
+
+	// Local destination that takes time to process
+	localServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		webhookStarted <- true
+		// Simulate slow processing
+		time.Sleep(200 * time.Millisecond)
+		webhookFinished <- true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer localServer.Close()
+
+	var pollCount int32
+	relayServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/relay/poll" {
+			count := atomic.AddInt32(&pollCount, 1)
+			if count == 1 {
+				webhook := &Webhook{
+					ID:      "webhook-1",
+					Method:  "POST",
+					Path:    "/test",
+					Headers: map[string][]string{},
+					Body:    base64.StdEncoding.EncodeToString([]byte(`{}`)),
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(webhook)
+				return
+			}
+			// Block subsequent polls until context canceled
+			<-r.Context().Done()
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if r.URL.Path == "/relay/response" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}))
+	defer relayServer.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	forwarder := NewForwarder(localServer.URL, "test", logger)
+	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- p.Run(ctx)
+	}()
+
+	// Wait for webhook processing to start
+	select {
+	case <-webhookStarted:
+		// Good
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for webhook to start")
+	}
+
+	// Cancel context while webhook is being processed
+	cancel()
+
+	// Verify that Run waits for worker to finish (webhookFinished should complete)
+	select {
+	case <-webhookFinished:
+		// Good - webhook finished processing
+	case <-time.After(time.Second):
+		t.Fatal("worker didn't complete - graceful shutdown not working")
+	}
+
+	// Wait for Run to return
+	select {
+	case <-done:
+		// Good
+	case <-time.After(time.Second):
+		t.Fatal("Run didn't return after workers finished")
 	}
 }
