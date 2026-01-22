@@ -98,6 +98,16 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
 
+      - name: Add Helm repositories
+        run: |
+          helm repo add valkey https://valkey.io/valkey-helm/
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/gatekeeperd
+          helm dependency update charts/gatekeeper-relay
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
