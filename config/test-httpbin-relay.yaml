@@ -1,0 +1,38 @@
+# Test gatekeeper-relay config for httpbin.org
+# Polls gatekeeperd and forwards to httpbin.org
+#
+# Deploy with:
+#   kubectl config use-context tinypulse-dev
+#   kubectl create secret generic gatekeeper-relay-test-secrets -n tiny-staging \
+#     --from-literal=RELAY_TOKEN_HTTPBIN='test-httpbin-token-12345'
+#   helm upgrade --install gatekeeper-relay charts/gatekeeper-relay -n tiny-staging \
+#     -f config/test-httpbin-relay.yaml \
+#     --set image.tag=pr-8-711d50c
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/tight-line/gatekeeper-relay
+  pullPolicy: Always
+
+existingSecret: "gatekeeper-relay-test-secrets"
+
+# Gatekeeperd server URL (use one of the test hostnames)
+server: "https://test-httpbin-relay.cloud.ike.tools"
+
+maxConsecutiveFailures: 10
+
+channels:
+  # Forward to httpbin.org - preserves path for testing
+  - name: httpbin
+    tokenKey: RELAY_TOKEN_HTTPBIN
+    destination: "https://httpbin.org"
+    workers: 2
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

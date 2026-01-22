@@ -129,6 +129,7 @@ func (f *Forwarder) copyHeaders(req *http.Request, webhook *Webhook) {
 	}
 	req.Header.Del("X-Gatekeeperd-Preserve-Host")
 	req.Header.Del("X-Gatekeeperd-Original-Host")
+	req.Header.Del("X-Relay-Stream-ID") // Internal header used for Redis ACK
 
 	req.Header.Set("X-Relay-Webhook-ID", webhook.ID)
 	req.Header.Set("X-Relay-Original-Path", webhook.Path)
