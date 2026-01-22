@@ -403,7 +403,7 @@ func (h *Handler) handleRelay(w http.ResponseWriter, r *http.Request, ctx *reque
 	h.logger.Info("request relayed",
 		"hostname", ctx.hostname,
 		"path", r.URL.Path,
-		"remote_addr", r.RemoteAddr,
+		"client_ip", h.getClientIP(r),
 		"status", resp.StatusCode,
 		"duration_ms", time.Since(ctx.start).Milliseconds(),
 	)
@@ -460,7 +460,7 @@ func (h *Handler) handleForward(w http.ResponseWriter, r *http.Request, ctx *req
 	h.logger.Info("request forwarded",
 		"hostname", ctx.hostname,
 		"path", r.URL.Path,
-		"remote_addr", r.RemoteAddr,
+		"client_ip", h.getClientIP(r),
 		"destination", ctx.route.Destination,
 		"status", status,
 		"duration_ms", time.Since(ctx.start).Milliseconds(),
