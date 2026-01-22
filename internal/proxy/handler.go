@@ -570,15 +570,26 @@ func categorizeVerificationError(err error) string {
 }
 
 // getClientIP extracts the client IP from a request.
-// If trustXForwardedFor is true, it checks X-Forwarded-For header first
-// (trusting the leftmost IP), then falls back to RemoteAddr.
+// If trustXForwardedFor is true, it checks X-Forwarded-For header first,
+// skipping any private/internal IPs to find the real public client IP.
 // If trustXForwardedFor is false, it only uses RemoteAddr.
 func (h *Handler) getClientIP(r *http.Request) string {
 	// Only check X-Forwarded-For if explicitly trusted
 	if h.trustXForwardedFor {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-			// The leftmost is the original client
+			// Walk through from left to right, skipping private/internal IPs
+			for _, part := range strings.Split(xff, ",") {
+				ip := strings.TrimSpace(part)
+				if ip == "" {
+					continue
+				}
+				// Skip private/internal IPs - these are intermediate proxies
+				if !isPrivateIP(ip) {
+					return ip
+				}
+			}
+			// If all IPs are private (e.g., internal network testing), return the leftmost
 			if idx := strings.Index(xff, ","); idx != -1 {
 				return strings.TrimSpace(xff[:idx])
 			}
@@ -593,6 +604,31 @@ func (h *Handler) getClientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// isPrivateIP checks if an IP address is private/internal (RFC 1918, loopback, link-local, etc.)
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+
+	// Check for loopback
+	if ip.IsLoopback() {
+		return true
+	}
+
+	// Check for link-local
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+
+	// Check for private ranges (RFC 1918 for IPv4, RFC 4193 for IPv6)
+	if ip.IsPrivate() {
+		return true
+	}
+
+	return false
 }
 
 // writeRelayResponse writes a relay response back to the original caller

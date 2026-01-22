@@ -1282,6 +1282,36 @@ func TestGetClientIP_TrustEnabled(t *testing.T) {
 			xForwardedFor: "2001:db8::1",
 			expectedIP:    "2001:db8::1",
 		},
+		{
+			name:          "private IP first, public IP second - returns public",
+			remoteAddr:    "10.0.0.1:12345",
+			xForwardedFor: "10.10.0.5, 98.158.192.247",
+			expectedIP:    "98.158.192.247",
+		},
+		{
+			name:          "multiple private IPs then public - returns public",
+			remoteAddr:    "10.0.0.1:12345",
+			xForwardedFor: "10.10.0.5, 192.168.1.1, 98.158.192.247, 172.16.0.1",
+			expectedIP:    "98.158.192.247",
+		},
+		{
+			name:          "loopback IP skipped",
+			remoteAddr:    "10.0.0.1:12345",
+			xForwardedFor: "127.0.0.1, 203.0.113.50",
+			expectedIP:    "203.0.113.50",
+		},
+		{
+			name:          "all private IPs - returns leftmost as fallback",
+			remoteAddr:    "10.0.0.1:12345",
+			xForwardedFor: "10.10.0.5, 192.168.1.1, 172.16.0.1",
+			expectedIP:    "10.10.0.5",
+		},
+		{
+			name:          "link-local IP skipped",
+			remoteAddr:    "10.0.0.1:12345",
+			xForwardedFor: "169.254.1.1, 203.0.113.50",
+			expectedIP:    "203.0.113.50",
+		},
 	}
 
 	for _, tc := range tests {
@@ -2201,6 +2231,60 @@ func TestHandler_VerifierTypesMap(t *testing.T) {
 	}
 	if handler.verifierTypes["my-noop"] != "noop" {
 		t.Errorf("expected verifierTypes['my-noop']='noop', got %q", handler.verifierTypes["my-noop"])
+	}
+}
+
+func TestIsPrivateIP(t *testing.T) {
+	tests := []struct {
+		ip       string
+		expected bool
+	}{
+		// Private IPv4 (RFC 1918)
+		{"10.0.0.1", true},
+		{"10.255.255.255", true},
+		{"172.16.0.1", true},
+		{"172.31.255.255", true},
+		{"192.168.0.1", true},
+		{"192.168.255.255", true},
+
+		// Loopback
+		{"127.0.0.1", true},
+		{"127.255.255.255", true},
+
+		// Link-local
+		{"169.254.0.1", true},
+		{"169.254.255.255", true},
+
+		// Public IPv4
+		{"8.8.8.8", false},
+		{"203.0.113.50", false},
+		{"98.158.192.247", false},
+		{"1.1.1.1", false},
+
+		// IPv6 loopback
+		{"::1", true},
+
+		// IPv6 link-local
+		{"fe80::1", true},
+
+		// IPv6 private (ULA)
+		{"fd00::1", true},
+
+		// IPv6 public
+		{"2001:db8::1", false},
+
+		// Invalid
+		{"not-an-ip", false},
+		{"", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.ip, func(t *testing.T) {
+			result := isPrivateIP(tc.ip)
+			if result != tc.expected {
+				t.Errorf("isPrivateIP(%q) = %v, want %v", tc.ip, result, tc.expected)
+			}
+		})
 	}
 }
 

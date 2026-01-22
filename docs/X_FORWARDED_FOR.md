@@ -95,8 +95,19 @@ spec:
               app.kubernetes.io/name: traefik
 ```
 
-## Why We Trust the Leftmost IP
+## How Gatekeeper Extracts the Client IP
 
-The `X-Forwarded-For` header format is `client, proxy1, proxy2, ...`. Each proxy in the chain appends the IP it received the connection from. The leftmost IP is set by the first proxy that received the request from the actual client. Since that first proxy (your ingress controller) is trusted and sets the value from the real TCP connection, the leftmost IP is the true client IP.
+The `X-Forwarded-For` header format is `client, proxy1, proxy2, ...`. Each proxy in the chain appends the IP it received the connection from.
 
-Gatekeeper does not support configuring "trusted proxy" depth (like some frameworks do) because in the expected deployment model, there is exactly one layer of trusted proxies (the ingress controller), and that proxy is responsible for setting the correct client IP.
+Gatekeeper walks through the `X-Forwarded-For` chain from left to right and returns the **first public IP** it finds, skipping any private/internal IPs (RFC 1918, loopback, link-local). This handles cases where internal load balancers or proxies prepend their own IPs to the chain.
+
+For example:
+- `X-Forwarded-For: 98.158.192.247, 10.10.0.5` → returns `98.158.192.247`
+- `X-Forwarded-For: 10.10.0.5, 98.158.192.247` → returns `98.158.192.247` (skips private IP)
+- `X-Forwarded-For: 10.10.0.5, 192.168.1.1` → returns `10.10.0.5` (all private, uses leftmost as fallback)
+
+Private IP ranges that are skipped:
+- `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (RFC 1918)
+- `127.0.0.0/8` (loopback)
+- `169.254.0.0/16` (link-local)
+- IPv6 equivalents (::1, fe80::/10, fc00::/7)
