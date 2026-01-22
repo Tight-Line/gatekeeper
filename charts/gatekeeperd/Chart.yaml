@@ -14,3 +14,8 @@ keywords:
 maintainers:
   - name: Tight Line
     email: certs@example.com
+dependencies:
+  - name: valkey
+    version: "~0.9"
+    repository: "https://valkey.io/valkey-helm/"
+    condition: redis.enabled,redis.bundled

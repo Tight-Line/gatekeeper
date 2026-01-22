@@ -1,6 +1,13 @@
+# Build artifacts
+bin/
+
+# Test output
 test-values-gatekeeperd.yaml
 test-values-relay.yaml
 coverage.out
+
+# Ephemeral planning docs
+PLAN.md
 
 # Deployment-specific config files (not tracked)
 # Keep only example/template files in config/

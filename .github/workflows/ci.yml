@@ -20,23 +20,13 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Run tests with coverage
-        run: go test -race -coverprofile=coverage.out -covermode=atomic -tags=ci ./...
-
-      - name: Check coverage threshold
-        run: |
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          echo "Total coverage: ${COVERAGE}%"
-          if (( $(echo "$COVERAGE < 100" | bc -l) )); then
-            echo "Coverage is below 100%"
-            go tool cover -func=coverage.out | grep -v "100.0%"
-            exit 1
-          fi
+      - name: Run tests and check coverage
+        run: ./scripts/check-coverage.sh --codecov
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: ./coverage.out
+          files: ./coverage.filtered.out
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 

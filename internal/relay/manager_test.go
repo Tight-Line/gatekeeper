@@ -689,3 +689,13 @@ func TestManager_DeliverHTTPRequest_PreserveHost(t *testing.T) {
 		t.Fatal("timeout waiting for response")
 	}
 }
+
+func TestManager_AckWebhook(t *testing.T) {
+	m := NewManager()
+
+	// AckWebhook is a no-op for MemoryManager, should always return nil
+	err := m.AckWebhook("any-token", "any-stream-id")
+	if err != nil {
+		t.Errorf("AckWebhook should return nil, got %v", err)
+	}
+}

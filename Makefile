@@ -29,17 +29,9 @@ test-coverage:
 	@echo "Coverage report: coverage.html"
 
 # Run tests and REQUIRE 100% coverage (use before releasing)
+# Specific branches can be excluded with: // coverage:ignore - <reason>
 test-coverage-check:
-	@echo "Running tests with coverage check (requires 100%)..."
-	@go test -coverprofile=coverage.out -tags=ci ./...
-	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
-	echo "Total coverage: $${COVERAGE}%"; \
-	if [ $$(echo "$$COVERAGE < 100" | bc -l) -eq 1 ]; then \
-		echo "ERROR: Coverage is below 100%"; \
-		go tool cover -func=coverage.out | grep -v "100.0%"; \
-		exit 1; \
-	fi
-	@echo "Coverage check passed: 100%"
+	@./scripts/check-coverage.sh
 
 # Run the server locally (for development)
 run: build

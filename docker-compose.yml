@@ -1,12 +1,23 @@
 # Docker Compose for local development and testing
+#
 # Usage:
-#   docker-compose up              # Start server only
-#   docker-compose --profile relay up  # Start server + relay client
-#   docker-compose down            # Stop all services
+#   docker-compose up                   # Build and start server only
+#   docker-compose --profile relay up   # Build and start server + relay client
+#   docker-compose down                 # Stop all services
+#
+# Using pre-built images (PR builds or releases):
+#   GATEKEEPERD_IMAGE=ghcr.io/tight-line/gatekeeperd:pr-123-abc1234 \
+#   RELAY_IMAGE=ghcr.io/tight-line/gatekeeper-relay:pr-123-abc1234 \
+#   docker-compose --profile relay up
+#
+# Or set in .env file:
+#   GATEKEEPERD_IMAGE=ghcr.io/tight-line/gatekeeperd:0.2.0
+#   RELAY_IMAGE=ghcr.io/tight-line/gatekeeper-relay:0.2.0
 
 services:
   # Gatekeeper server
   gatekeeperd:
+    image: ${GATEKEEPERD_IMAGE:-}
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,6 +40,7 @@ services:
 
   # Gatekeeper relay client (optional, use --profile relay)
   gatekeeper-relay:
+    image: ${RELAY_IMAGE:-}
     build:
       context: .
       dockerfile: Dockerfile.relay

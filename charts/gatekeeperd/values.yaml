@@ -16,6 +16,35 @@ fullnameOverride: ""
 # See README.md "Security Considerations" for details.
 trustXForwardedFor: false
 
+# ==============================================================================
+# REDIS/VALKEY: Required for multi-replica deployments with relay
+# ==============================================================================
+#
+# When using relay (relayTokenKey in routes) with replicaCount > 1, you MUST
+# enable Redis/Valkey to coordinate webhook delivery across replicas.
+#
+# Options:
+#   - bundled: true (default) - Deploy Valkey as a subchart
+#   - bundled: false - Use an external Redis/Valkey server
+#
+# Without Redis, each replica maintains its own webhook queue, which breaks
+# the delivery guarantee when multiple replicas are running.
+# ==============================================================================
+redis:
+  # Enable Redis/Valkey for multi-replica relay coordination
+  enabled: false
+  # Deploy Valkey as a subchart (when enabled and bundled=true)
+  bundled: true
+  # External Redis/Valkey configuration (when bundled=false)
+  host: ""
+  port: 6379
+  password: ""
+  # Use existing secret for password
+  existingSecret: ""
+  existingSecretKey: "redis-password"
+  # Enable TLS for Redis connection
+  tls: false
+
 # TLS settings
 # For multi-replica deployments, use ingress.enabled=true with cert-manager instead.
 # Internal TLS (tls.enabled) only works with replicaCount=1 or ReadWriteMany storage.
@@ -258,3 +287,24 @@ securityContext: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# ==============================================================================
+# VALKEY SUBCHART CONFIGURATION
+# ==============================================================================
+# These settings are passed to the official Valkey Helm chart when redis.bundled=true
+# See: https://github.com/valkey-io/valkey-helm
+valkey:
+  # No auth needed for in-cluster use
+  auth:
+    enabled: false
+  # Single-node mode (no replication needed for relay)
+  replica:
+    enabled: false
+  # Resource limits for bundled Valkey
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

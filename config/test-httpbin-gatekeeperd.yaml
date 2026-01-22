@@ -1,0 +1,62 @@
+# Test gatekeeperd config for httpbin.org
+# Tests both direct and relay delivery modes
+#
+# Deploy with:
+#   kubectl config use-context ike-cloud-nonprod
+#   kubectl create secret generic gatekeeperd-test-secrets -n gatekeeper \
+#     --from-literal=RELAY_TOKEN_HTTPBIN='test-httpbin-token-12345'
+#   helm upgrade --install gatekeeperd charts/gatekeeperd -n gatekeeper \
+#     -f config/test-httpbin-gatekeeperd.yaml \
+#     --set image.tag=pr-8-711d50c
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/tight-line/gatekeeperd
+  pullPolicy: Always
+
+# Redis for multi-replica relay
+redis:
+  enabled: true
+  bundled: true
+
+existingSecret: "gatekeeperd-test-secrets"
+
+# Gateway API configuration
+gateway:
+  enabled: true
+  create: true
+  gatewayClassName: "traefik"
+  tls:
+    enabled: true
+    issuerName: "letsencrypt-prod"
+
+ingress:
+  enabled: false
+
+# No verifiers needed for testing
+verifiers:
+  noop:
+    type: noop
+
+# Test routes - both point to httpbin.org
+routes:
+  # Direct route - forwards directly to httpbin.org (no relay)
+  - hostname: test-httpbin-direct.cloud.ike.tools
+    path: /
+    verifier: noop
+    destination: "https://httpbin.org"
+
+  # Relay route - sends via relay client to httpbin.org
+  - hostname: test-httpbin-relay.cloud.ike.tools
+    path: /
+    verifier: noop
+    relayTokenKey: RELAY_TOKEN_HTTPBIN
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

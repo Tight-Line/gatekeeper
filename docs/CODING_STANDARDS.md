@@ -21,6 +21,7 @@ When writing or updating documentation:
 - Add comments for exported functions and types
 - Error messages should be lowercase and not end with punctuation
 - Use structured logging (slog) with consistent field names
+- **Cognitive complexity**: Keep functions under 15 cognitive complexity (enforced by SonarCloud). Extract helper methods when complexity grows.
 
 ## Package Organization
 
@@ -74,6 +75,49 @@ go test -coverprofile=coverage.out -tags=ci ./...
 go tool cover -func=coverage.out | grep -v "100.0%"  # Show uncovered code
 go tool cover -html=coverage.out                      # Visual coverage report
 ```
+
+### CI Test Environment
+
+CI runs tests with additional flags that may reveal issues not seen locally:
+
+- **Race detection** (`-race`): CI runs with race detection enabled. This can cause timing-sensitive tests to behave differently. If a test passes locally but fails in CI with race conditions, the test likely has a race bug.
+- **Atomic coverage** (`-covermode=atomic`): Required for accurate coverage with `-race`.
+
+### Testing with miniredis
+
+Redis-dependent code uses [miniredis](https://github.com/alicebob/miniredis) for testing. miniredis simulates most Redis commands but has limitations:
+
+- Does not track message idle time in streams (XPendingExt)
+- Does not track delivery counts accurately
+- XCLAIM behavior differs from real Redis
+
+Code paths that depend on these behaviors may need `// coverage:ignore - miniredis limitation` comments. See AGENTS.md for the coverage:ignore policy.
+
+### Making Intervals Configurable
+
+For code with time-based behavior (polling intervals, recovery timers, timeouts), make intervals configurable so tests can use short values:
+
+```go
+type Manager struct {
+    recoveryInterval time.Duration  // Configurable for testing
+}
+
+func NewManager(opts ...Option) *Manager {
+    m := &Manager{
+        recoveryInterval: 30 * time.Second,  // Production default
+    }
+    for _, opt := range opts {
+        opt(m)
+    }
+    return m
+}
+
+func WithRecoveryInterval(d time.Duration) Option {
+    return func(m *Manager) { m.recoveryInterval = d }
+}
+```
+
+Tests can then use millisecond intervals to run quickly without flakiness.
 
 ## Webhook Recording System (VCR)
 

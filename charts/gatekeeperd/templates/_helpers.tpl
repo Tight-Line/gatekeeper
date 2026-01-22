@@ -58,3 +58,52 @@ Get the name of the secret to use
 {{- include "gatekeeperd.fullname" . }}-secrets
 {{- end }}
 {{- end }}
+
+{{/*
+Build Redis URI from configuration
+*/}}
+{{- define "gatekeeperd.redisUri" -}}
+{{- if .Values.redis.enabled }}
+{{- $scheme := "redis" }}
+{{- if .Values.redis.tls }}
+{{- $scheme = "rediss" }}
+{{- end }}
+{{- if .Values.redis.bundled }}
+{{- /* Bundled Valkey subchart - use service name (official chart, no -master suffix) */}}
+{{- $host := printf "%s-valkey" (include "gatekeeperd.fullname" .) }}
+{{- printf "%s://%s:6379" $scheme $host }}
+{{- else }}
+{{- /* External Redis/Valkey */}}
+{{- $host := required "redis.host is required when redis.bundled=false" .Values.redis.host }}
+{{- $port := .Values.redis.port | default 6379 }}
+{{- if .Values.redis.password }}
+{{- printf "%s://:%s@%s:%d" $scheme .Values.redis.password $host (int $port) }}
+{{- else }}
+{{- printf "%s://%s:%d" $scheme $host (int $port) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Check if any routes use relay tokens
+*/}}
+{{- define "gatekeeperd.hasRelayRoutes" -}}
+{{- $hasRelay := false }}
+{{- range .Values.routes }}
+{{- if .relayTokenKey }}
+{{- $hasRelay = true }}
+{{- end }}
+{{- end }}
+{{- $hasRelay }}
+{{- end }}
+
+{{/*
+Validate configuration: multi-replica with relay requires redis
+*/}}
+{{- define "gatekeeperd.validateConfig" -}}
+{{- $hasRelay := include "gatekeeperd.hasRelayRoutes" . }}
+{{- if and (gt (int .Values.replicaCount) 1) (eq $hasRelay "true") (not .Values.redis.enabled) }}
+{{- fail "redis.enabled must be true when replicaCount > 1 and routes use relayTokenKey (multi-replica relay requires Redis/Valkey)" }}
+{{- end }}
+{{- end }}

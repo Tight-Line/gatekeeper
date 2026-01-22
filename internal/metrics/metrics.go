@@ -81,6 +81,64 @@ var (
 		},
 		[]string{"hostname", "destination"},
 	)
+
+	// Relay metrics
+
+	// RelayWebhooksQueued counts webhooks added to the relay queue
+	RelayWebhooksQueued = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "gatekeeper_relay_webhooks_queued_total",
+			Help: "Total number of webhooks added to the relay queue",
+		},
+		[]string{"token"},
+	)
+
+	// RelayWebhooksDelivered counts webhooks successfully delivered via relay
+	RelayWebhooksDelivered = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "gatekeeper_relay_webhooks_delivered_total",
+			Help: "Total number of webhooks successfully delivered via relay",
+		},
+		[]string{"token"},
+	)
+
+	// RelayDeliveryErrors counts relay delivery errors
+	RelayDeliveryErrors = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "gatekeeper_relay_delivery_errors_total",
+			Help: "Total number of relay delivery errors",
+		},
+		[]string{"token", "reason"},
+	)
+
+	// RelayWebhooksPending tracks the number of pending webhooks in the relay queue
+	// Only available in Redis mode
+	RelayWebhooksPending = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gatekeeper_relay_webhooks_pending",
+			Help: "Number of webhooks pending in the relay queue (Redis mode only)",
+		},
+		[]string{"token"},
+	)
+
+	// RelayClientsConnected tracks the number of connected relay clients
+	RelayClientsConnected = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gatekeeper_relay_clients_connected",
+			Help: "Number of connected relay clients per token",
+		},
+		[]string{"token"},
+	)
+
+	// RelayDeliveryDuration measures relay delivery latency
+	RelayDeliveryDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "gatekeeper_relay_delivery_duration_seconds",
+			Help:    "Relay delivery duration in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"token"},
+	)
 )
 
 // Handler returns the Prometheus metrics HTTP handler
@@ -122,4 +180,30 @@ func RecordIPRangeFetchError(allowlist string) {
 // RecordForwardError records a forwarding error
 func RecordForwardError(hostname, destination string) {
 	ForwardErrors.WithLabelValues(hostname, destination).Inc()
+}
+
+// RecordRelayWebhookQueued records a webhook added to the relay queue
+func RecordRelayWebhookQueued(token string) {
+	RelayWebhooksQueued.WithLabelValues(token).Inc()
+}
+
+// RecordRelayWebhookDelivered records a successful relay delivery
+func RecordRelayWebhookDelivered(token string, durationSeconds float64) {
+	RelayWebhooksDelivered.WithLabelValues(token).Inc()
+	RelayDeliveryDuration.WithLabelValues(token).Observe(durationSeconds)
+}
+
+// RecordRelayDeliveryError records a relay delivery error
+func RecordRelayDeliveryError(token, reason string) {
+	RelayDeliveryErrors.WithLabelValues(token, reason).Inc()
+}
+
+// RecordRelayWebhooksPending updates the pending webhooks gauge
+func RecordRelayWebhooksPending(token string, count int) {
+	RelayWebhooksPending.WithLabelValues(token).Set(float64(count))
+}
+
+// RecordRelayClientsConnected updates the connected clients gauge
+func RecordRelayClientsConnected(token string, count int) {
+	RelayClientsConnected.WithLabelValues(token).Set(float64(count))
 }

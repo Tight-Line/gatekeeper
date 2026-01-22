@@ -21,11 +21,23 @@ type Config struct {
 	MaxConsecutiveFailures int             `yaml:"max_consecutive_failures"` // 0 means use default
 }
 
+// DefaultWorkers is the default number of concurrent workers per channel
+const DefaultWorkers = 1
+
 // ChannelConfig represents a single relay channel configuration
 type ChannelConfig struct {
 	Name        string `yaml:"name"`
 	Token       string `yaml:"token"`
 	Destination string `yaml:"destination"`
+	Workers     int    `yaml:"workers"` // Number of concurrent workers (default: 1)
+}
+
+// GetWorkers returns the number of workers for this channel (minimum 1)
+func (c *ChannelConfig) GetWorkers() int {
+	if c.Workers <= 0 {
+		return DefaultWorkers
+	}
+	return c.Workers
 }
 
 // Load reads and parses the configuration file

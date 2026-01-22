@@ -933,6 +933,67 @@ func TestHandler_RelayDeliveryContextCancelled(t *testing.T) {
 	}
 }
 
+func TestHandler_RelayDeliveryExplicitCancel(t *testing.T) {
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:   "test.com",
+				Path:       "/webhook",
+				RelayToken: "test-token",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
+
+	rm := relay.NewManager()
+	rm.RegisterToken("test-token")
+	handler.SetRelayManager(rm)
+
+	// Start a poll that will receive the webhook but cancel before responding
+	pollCtx, pollCancel := context.WithCancel(context.Background())
+	defer pollCancel()
+
+	webhookReceived := make(chan struct{})
+	go func() {
+		webhook, _ := rm.Poll(pollCtx, "test-token")
+		if webhook != nil {
+			close(webhookReceived)
+			// Don't send response - let the request context be canceled
+		}
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Make request with a context that we'll cancel explicitly
+	body := []byte(`{"test":"data"}`)
+	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
+	req.Host = "test.com"
+	req.RemoteAddr = "127.0.0.1:12345"
+
+	// Create a context that we cancel explicitly (not timeout)
+	ctx, cancel := context.WithCancel(context.Background())
+	req = req.WithContext(ctx)
+
+	// Cancel the context after a short delay
+	go func() {
+		<-webhookReceived
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Should get 502 Bad Gateway on delivery error (context.Canceled)
+	if rr.Code != http.StatusBadGateway {
+		t.Errorf("expected status 502, got %d", rr.Code)
+	}
+}
+
 func TestHandler_VerifierNotFound(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{

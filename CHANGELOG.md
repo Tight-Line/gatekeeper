@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Redis/Valkey support for multi-replica relay deployments with at-most-once delivery guarantees
+- Pending message recovery for Redis relay mode (reclaims stuck messages after 60s idle)
+- Concurrent webhook processing in relay client with configurable worker pool (`workers` config)
+- Prometheus metrics for relay operations: `gatekeeper_relay_webhooks_queued_total`, `gatekeeper_relay_webhooks_delivered_total`, `gatekeeper_relay_delivery_errors_total`, `gatekeeper_relay_webhooks_pending`, `gatekeeper_relay_clients_connected`, `gatekeeper_relay_delivery_duration_seconds`
+- Helm chart support for bundled Valkey subchart or external Redis connection
+- Helm chart validation fails when `replicaCount > 1` with relay routes but Redis not enabled
+
 ## [0.1.11] - 2026-01-22
 
 ### Changed

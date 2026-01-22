@@ -18,13 +18,13 @@ const (
 
 // Handler handles HTTP requests for the relay protocol
 type Handler struct {
-	manager     *Manager
+	manager     Manager
 	logger      *slog.Logger
 	pollTimeout time.Duration
 }
 
 // NewHandler creates a new relay HTTP handler
-func NewHandler(manager *Manager, logger *slog.Logger) *Handler {
+func NewHandler(manager Manager, logger *slog.Logger) *Handler {
 	return &Handler{
 		manager:     manager,
 		logger:      logger,
@@ -95,6 +95,19 @@ func (h *Handler) handlePoll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(webhook); err != nil {
 		h.logger.Error("failed to encode webhook response", "error", err)
+		return
+	}
+
+	// ACK the message after successful delivery to relay client
+	// The stream ID is stored in X-Relay-Stream-ID header by Redis manager
+	if streamIDs, ok := webhook.Headers["X-Relay-Stream-ID"]; ok && len(streamIDs) > 0 {
+		if err := h.manager.AckWebhook(token, streamIDs[0]); err != nil {
+			h.logger.Error("failed to ACK webhook",
+				"webhook_id", webhook.ID,
+				"stream_id", streamIDs[0],
+				"error", err,
+			)
+		}
 	}
 }
 

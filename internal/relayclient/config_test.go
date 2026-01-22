@@ -336,6 +336,28 @@ func TestConfig_LoadAuto_EnvVarError(t *testing.T) {
 	}
 }
 
+func TestChannelConfig_GetWorkers(t *testing.T) {
+	tests := []struct {
+		name    string
+		workers int
+		want    int
+	}{
+		{"default (0)", 0, 1},
+		{"negative", -1, 1},
+		{"one", 1, 1},
+		{"multiple", 10, 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ch := ChannelConfig{Workers: tt.workers}
+			if got := ch.GetWorkers(); got != tt.want {
+				t.Errorf("GetWorkers() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConfig_GetMaxConsecutiveFailures(t *testing.T) {
 	// Test default value
 	cfg := &Config{
