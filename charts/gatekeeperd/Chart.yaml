@@ -16,7 +16,6 @@ maintainers:
     email: certs@example.com
 dependencies:
   - name: valkey
-    version: "~2.0"
-    repository: "oci://registry-1.docker.io/bitnamicharts"
+    version: "~0.9"
+    repository: "https://valkey.io/valkey-helm/"
     condition: redis.enabled,redis.bundled
-    alias: valkey

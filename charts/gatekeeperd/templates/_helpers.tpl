@@ -69,8 +69,8 @@ Build Redis URI from configuration
 {{- $scheme = "rediss" }}
 {{- end }}
 {{- if .Values.redis.bundled }}
-{{- /* Bundled Valkey subchart - use service name */}}
-{{- $host := printf "%s-valkey-master" (include "gatekeeperd.fullname" .) }}
+{{- /* Bundled Valkey subchart - use service name (official chart, no -master suffix) */}}
+{{- $host := printf "%s-valkey" (include "gatekeeperd.fullname" .) }}
 {{- printf "%s://%s:6379" $scheme $host }}
 {{- else }}
 {{- /* External Redis/Valkey */}}

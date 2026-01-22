@@ -291,20 +291,20 @@ affinity: {}
 # ==============================================================================
 # VALKEY SUBCHART CONFIGURATION
 # ==============================================================================
-# These settings are passed to the Valkey subchart when redis.bundled=true
-# See: https://github.com/bitnami/charts/tree/main/bitnami/valkey
+# These settings are passed to the official Valkey Helm chart when redis.bundled=true
+# See: https://github.com/valkey-io/valkey-helm
 valkey:
-  # Disable auth for simplicity (running in-cluster only)
+  # No auth needed for in-cluster use
   auth:
     enabled: false
   # Single-node mode (no replication needed for relay)
-  architecture: standalone
+  replica:
+    enabled: false
   # Resource limits for bundled Valkey
-  master:
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 200m
-        memory: 256Mi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
