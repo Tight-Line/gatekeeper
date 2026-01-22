@@ -11,6 +11,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
 )
 
 func newTestHandler() (*Handler, *MemoryManager) {
@@ -19,6 +21,16 @@ func newTestHandler() (*Handler, *MemoryManager) {
 	handler := NewHandler(manager, logger)
 	handler.SetPollTimeout(100 * time.Millisecond) // Short timeout for tests
 	return handler, manager
+}
+
+// mockManagerWithAckError wraps a Manager and returns an error from AckWebhook
+type mockManagerWithAckError struct {
+	Manager
+	ackErr error
+}
+
+func (m *mockManagerWithAckError) AckWebhook(token, streamID string) error {
+	return m.ackErr
 }
 
 func TestHandler_NotFound(t *testing.T) {
@@ -367,4 +379,143 @@ func TestHandler_Poll_WriteError(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for poll handler")
 	}
+}
+
+func TestHandler_Poll_AcksRedisMessage(t *testing.T) {
+	// Use miniredis to test the ACK path
+	mr := miniredis.RunT(t)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	manager, err := NewRedisManager("redis://"+mr.Addr(), logger)
+	if err != nil {
+		t.Fatalf("NewRedisManager failed: %v", err)
+	}
+	defer manager.Shutdown()
+
+	manager.RegisterToken("valid-token")
+
+	handler := NewHandler(manager, logger)
+	handler.SetPollTimeout(2 * time.Second)
+
+	// Create a context we can cancel to stop the Deliver goroutine
+	deliverCtx, deliverCancel := context.WithCancel(context.Background())
+	defer deliverCancel()
+
+	// Deliver a webhook in background
+	deliverDone := make(chan struct{})
+	go func() {
+		defer close(deliverDone)
+		webhook := &Webhook{
+			ID:     "test-webhook-id",
+			Method: "POST",
+			Path:   "/events",
+		}
+		// This will block waiting for response until context is canceled
+		_, _ = manager.Deliver(deliverCtx, "valid-token", webhook)
+	}()
+
+	// Give time for webhook to be added to stream
+	time.Sleep(50 * time.Millisecond)
+
+	// Poll for the webhook
+	req := httptest.NewRequest(http.MethodGet, "/relay/poll", nil)
+	req.Header.Set(TokenHeader, "valid-token")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var webhook Webhook
+	if err := json.NewDecoder(rr.Body).Decode(&webhook); err != nil {
+		t.Fatalf("failed to decode webhook: %v", err)
+	}
+
+	if webhook.ID != "test-webhook-id" {
+		t.Errorf("expected webhook ID 'test-webhook-id', got %q", webhook.ID)
+	}
+
+	// Verify the webhook had the stream ID header (set by RedisManager)
+	streamIDs, ok := webhook.Headers["X-Relay-Stream-ID"]
+	if !ok || len(streamIDs) == 0 {
+		t.Error("webhook should have X-Relay-Stream-ID header")
+	}
+
+	// Poll again - should timeout (no content) since message was ACKed
+	// If ACK didn't work, we'd get the same message again as a pending message
+	handler.SetPollTimeout(100 * time.Millisecond)
+	req2 := httptest.NewRequest(http.MethodGet, "/relay/poll", nil)
+	req2.Header.Set(TokenHeader, "valid-token")
+	rr2 := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr2, req2)
+
+	// Should get 204 No Content (timeout) since message was ACKed
+	if rr2.Code != http.StatusNoContent {
+		t.Errorf("expected status %d (no pending messages), got %d", http.StatusNoContent, rr2.Code)
+	}
+
+	// Clean up: cancel the Deliver context and wait for goroutine
+	deliverCancel()
+	<-deliverDone
+}
+
+func TestHandler_Poll_AckWebhookError(t *testing.T) {
+	// Use miniredis with a mock wrapper that returns error from AckWebhook
+	mr := miniredis.RunT(t)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	realManager, err := NewRedisManager("redis://"+mr.Addr(), logger)
+	if err != nil {
+		t.Fatalf("NewRedisManager failed: %v", err)
+	}
+	defer realManager.Shutdown()
+
+	// Wrap with mock that returns error from AckWebhook
+	mockManager := &mockManagerWithAckError{
+		Manager: realManager,
+		ackErr:  errors.New("ack failed"),
+	}
+
+	realManager.RegisterToken("valid-token")
+
+	handler := NewHandler(mockManager, logger)
+	handler.SetPollTimeout(2 * time.Second)
+
+	// Create a context we can cancel to stop the Deliver goroutine
+	deliverCtx, deliverCancel := context.WithCancel(context.Background())
+	defer deliverCancel()
+
+	// Deliver a webhook in background
+	deliverDone := make(chan struct{})
+	go func() {
+		defer close(deliverDone)
+		webhook := &Webhook{
+			ID:     "test-webhook-id",
+			Method: "POST",
+			Path:   "/events",
+		}
+		_, _ = realManager.Deliver(deliverCtx, "valid-token", webhook)
+	}()
+
+	// Give time for webhook to be added to stream
+	time.Sleep(50 * time.Millisecond)
+
+	// Poll for the webhook - should succeed but ACK will fail (and be logged)
+	req := httptest.NewRequest(http.MethodGet, "/relay/poll", nil)
+	req.Header.Set(TokenHeader, "valid-token")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	// Should still get OK status - ACK error is logged but doesn't fail the request
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Clean up
+	deliverCancel()
+	<-deliverDone
 }

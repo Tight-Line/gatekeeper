@@ -80,6 +80,11 @@ type Manager interface {
 	// Returns ErrRequestNotFound if the request ID is not found.
 	SendResponse(resp *Response) error
 
+	// AckWebhook acknowledges that a webhook was successfully delivered to the relay client.
+	// For Redis-backed managers, this removes the message from the pending state.
+	// For in-memory managers, this is a no-op.
+	AckWebhook(token, streamID string) error
+
 	// Shutdown cancels all waiting pollers and cleans up resources
 	Shutdown()
 

@@ -160,6 +160,11 @@ func (m *MemoryManager) DeliverHTTPRequest(ctx context.Context, token string, r 
 	return m.Deliver(ctx, token, webhook)
 }
 
+// AckWebhook is a no-op for MemoryManager (no persistence to acknowledge)
+func (m *MemoryManager) AckWebhook(token, streamID string) error {
+	return nil
+}
+
 // SendResponse delivers a response from the relay client back to the waiting caller
 func (m *MemoryManager) SendResponse(resp *Response) error {
 	m.mu.RLock()
