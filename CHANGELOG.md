@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-01-22
+
 ### Fixed
 - X-Forwarded-For parsing now skips private/internal IPs to find the real public client IP, fixing incorrect client IP detection behind GCP load balancers and similar infrastructure
 
