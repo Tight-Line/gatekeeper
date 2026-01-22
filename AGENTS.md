@@ -268,3 +268,137 @@ The project enforces 100% test coverage. In rare cases, specific lines may be ma
 2. The developer explicitly asks you to mark specific code as untestable
 
 The `scripts/check-coverage.sh` script validates that all uncovered lines have a `coverage:ignore` comment with a reason. For Codecov integration, use `--codecov` flag to generate a filtered coverage file.
+
+## Testing Deployments
+
+See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing instructions. This section covers what AI agents need to know for common deployment testing tasks.
+
+### PR Image Builds
+
+When code is pushed to a PR, GitHub Actions automatically builds Docker images:
+
+- **gatekeeperd**: `ghcr.io/tight-line/gatekeeperd:pr-<number>-<sha>`
+- **gatekeeper-relay**: `ghcr.io/tight-line/gatekeeper-relay:pr-<number>-<sha>`
+
+The PR will have a comment with the exact tags. Images are cleaned up automatically when the PR closes or after 15 days.
+
+### Testing with docker-compose
+
+To test PR images locally with docker-compose:
+
+```bash
+# Get the PR image tag (from PR comment or construct it)
+PR_TAG="pr-123-abc1234"
+
+# Run with pre-built images
+GATEKEEPERD_IMAGE=ghcr.io/tight-line/gatekeeperd:$PR_TAG \
+RELAY_IMAGE=ghcr.io/tight-line/gatekeeper-relay:$PR_TAG \
+docker-compose --profile relay up
+```
+
+Or create/update a `.env` file in the repo root:
+
+```bash
+# .env (not tracked in git)
+GATEKEEPERD_IMAGE=ghcr.io/tight-line/gatekeeperd:pr-123-abc1234
+RELAY_IMAGE=ghcr.io/tight-line/gatekeeper-relay:pr-123-abc1234
+```
+
+### Testing with Kubernetes/Helm
+
+To deploy PR images to a Kubernetes cluster, update the Helm values:
+
+**Option 1: Command line overrides**
+
+```bash
+# gatekeeperd
+helm upgrade --install gatekeeperd ./charts/gatekeeperd \
+  --set image.tag=pr-123-abc1234 \
+  --set image.pullPolicy=Always \
+  -n your-namespace
+
+# gatekeeper-relay
+helm upgrade --install gatekeeper-relay ./charts/gatekeeper-relay \
+  --set image.tag=pr-123-abc1234 \
+  --set image.pullPolicy=Always \
+  -n your-namespace
+```
+
+**Option 2: Values file override**
+
+Create a temporary values file (do not commit):
+
+```yaml
+# values-test.yaml
+image:
+  tag: "pr-123-abc1234"
+  pullPolicy: Always
+```
+
+Then deploy:
+
+```bash
+helm upgrade --install gatekeeperd ./charts/gatekeeperd \
+  -f charts/gatekeeperd/values.yaml \
+  -f values-test.yaml \
+  -n your-namespace
+```
+
+### AI Agent Deployment Workflow
+
+When a user says "push this branch and test it in my k8s env", follow this workflow:
+
+1. **Commit and push the branch** (if not already done):
+   ```bash
+   git add -A && git commit -m "..." && git push origin HEAD
+   ```
+
+2. **Create or update the PR** (if needed):
+   ```bash
+   gh pr create --title "..." --body "..." --head $(git branch --show-current)
+   ```
+
+3. **Wait for the PR images workflow** to complete:
+   ```bash
+   gh run list --workflow=pr-images.yml --branch $(git branch --show-current) --limit 1
+   gh run watch <run-id>  # Watch until complete
+   ```
+
+4. **Get the image tag** from the workflow or construct it:
+   ```bash
+   PR_NUMBER=$(gh pr view --json number -q .number)
+   SHORT_SHA=$(git rev-parse --short HEAD)
+   TAG="pr-${PR_NUMBER}-${SHORT_SHA}"
+   ```
+
+5. **Deploy to Kubernetes**:
+   ```bash
+   helm upgrade --install gatekeeperd ./charts/gatekeeperd \
+     --set image.tag=$TAG \
+     --set image.pullPolicy=Always \
+     -n <namespace>
+   ```
+
+6. **Verify the deployment**:
+   ```bash
+   kubectl rollout status deployment/gatekeeperd -n <namespace>
+   kubectl get pods -n <namespace> -l app.kubernetes.io/name=gatekeeperd
+   ```
+
+### Reverting to Release Version
+
+To roll back from a test deployment:
+
+```bash
+helm upgrade --install gatekeeperd ./charts/gatekeeperd \
+  --set image.tag=0.1.0 \
+  -n your-namespace
+```
+
+Or use `latest` for the most recent release:
+
+```bash
+helm upgrade --install gatekeeperd ./charts/gatekeeperd \
+  --set image.tag=latest \
+  -n your-namespace
+```

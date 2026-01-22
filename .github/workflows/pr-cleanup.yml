@@ -1,0 +1,139 @@
+name: PR Image Cleanup
+
+on:
+  # Clean up when PR is closed (merged or abandoned)
+  pull_request:
+    types: [closed]
+
+  # Scheduled cleanup for stale PR images (runs daily at 3 AM UTC)
+  schedule:
+    - cron: '0 3 * * *'
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (do not delete)'
+        type: boolean
+        default: true
+
+env:
+  REGISTRY: ghcr.io
+  STALE_DAYS: 15
+
+jobs:
+  cleanup-pr:
+    # Only run on PR close events (not scheduled)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Delete PR images
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const packages = ['gatekeeperd', 'gatekeeper-relay'];
+
+            for (const pkg of packages) {
+              console.log(`Cleaning up ${pkg} images for PR #${pr}...`);
+              try {
+                // List all versions
+                const versions = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                  package_type: 'container',
+                  package_name: pkg,
+                  org: owner,
+                  per_page: 100
+                });
+
+                // Find versions tagged with this PR
+                const prPrefix = `pr-${pr}-`;
+                const toDelete = versions.data.filter(v =>
+                  v.metadata?.container?.tags?.some(tag => tag.startsWith(prPrefix))
+                );
+
+                console.log(`Found ${toDelete.length} images to delete for ${pkg}`);
+
+                for (const version of toDelete) {
+                  console.log(`Deleting ${pkg}:${version.metadata.container.tags.join(', ')}`);
+                  await github.rest.packages.deletePackageVersionForOrg({
+                    package_type: 'container',
+                    package_name: pkg,
+                    org: owner,
+                    package_version_id: version.id
+                  });
+                }
+              } catch (error) {
+                // 404 means package doesn't exist yet, which is fine
+                if (error.status !== 404) {
+                  console.error(`Error cleaning up ${pkg}: ${error.message}`);
+                }
+              }
+            }
+
+  cleanup-stale:
+    # Only run on schedule or manual trigger
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Delete stale PR images
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const packages = ['gatekeeperd', 'gatekeeper-relay'];
+            const staleDays = parseInt('${{ env.STALE_DAYS }}');
+            const dryRun = '${{ github.event.inputs.dry_run }}' === 'true';
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - staleDays);
+
+            console.log(`Cleaning up PR images older than ${staleDays} days (before ${cutoffDate.toISOString()})`);
+            if (dryRun) {
+              console.log('DRY RUN - no images will be deleted');
+            }
+
+            for (const pkg of packages) {
+              console.log(`\nProcessing ${pkg}...`);
+              try {
+                // List all versions
+                const versions = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                  package_type: 'container',
+                  package_name: pkg,
+                  org: owner,
+                  per_page: 100
+                });
+
+                // Find stale PR versions (tagged with pr-* and older than cutoff)
+                const prTagRegex = /^pr-\d+-/;
+                const toDelete = versions.data.filter(v => {
+                  const isPrImage = v.metadata?.container?.tags?.some(tag => prTagRegex.test(tag));
+                  const createdAt = new Date(v.created_at);
+                  return isPrImage && createdAt < cutoffDate;
+                });
+
+                console.log(`Found ${toDelete.length} stale images to delete`);
+
+                for (const version of toDelete) {
+                  const tags = version.metadata.container.tags.join(', ') || 'untagged';
+                  console.log(`${dryRun ? '[DRY RUN] Would delete' : 'Deleting'} ${pkg}:${tags} (created ${version.created_at})`);
+                  if (!dryRun) {
+                    await github.rest.packages.deletePackageVersionForOrg({
+                      package_type: 'container',
+                      package_name: pkg,
+                      org: owner,
+                      package_version_id: version.id
+                    });
+                  }
+                }
+              } catch (error) {
+                if (error.status !== 404) {
+                  console.error(`Error cleaning up ${pkg}: ${error.message}`);
+                }
+              }
+            }
