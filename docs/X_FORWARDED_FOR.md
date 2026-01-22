@@ -15,6 +15,7 @@ Enable this flag when gatekeeper runs behind a trusted reverse proxy that sets t
 | Deployment | Enable flag? | Reason |
 |------------|--------------|--------|
 | Behind Ingress Controller | Yes | Ingress sets X-Forwarded-For from real client IP |
+| Behind Gateway API (Traefik, Istio, etc.) | Yes | Gateway sets X-Forwarded-For from real client IP |
 | Behind L7 Load Balancer (AWS ALB, GCP HTTP LB) | Yes | L7 LBs terminate HTTP and set X-Forwarded-For |
 | Behind L4 Load Balancer with TCP passthrough (AWS NLB, GCP TCP LB) | No | Client IP is preserved in TCP connection; X-Forwarded-For not set |
 | Direct exposure with `-tls` mode | No | No proxy; X-Forwarded-For could be spoofed by attacker |
@@ -25,6 +26,7 @@ Enable this flag when gatekeeper runs behind a trusted reverse proxy that sets t
 When using the Helm chart:
 
 - If `ingress.enabled: true`, the flag is automatically enabled
+- If `gateway.enabled: true`, the flag is automatically enabled
 - If `trustXForwardedFor: true` is set explicitly, the flag is enabled
 - Otherwise, the flag is disabled (safe default)
 
@@ -33,7 +35,11 @@ When using the Helm chart:
 ingress:
   enabled: true
 
-# Or explicitly enable for L7 load balancer without ingress
+# Or when using Gateway API
+gateway:
+  enabled: true
+
+# Or explicitly enable for L7 load balancer without ingress/gateway
 trustXForwardedFor: true
 ```
 
@@ -53,11 +59,11 @@ This means an attacker cannot spoof their IP by sending a fake `X-Forwarded-For`
 
 1. **Gatekeeper must not be directly exposed to the internet.** All external traffic must flow through the ingress controller or gateway. If gatekeeper is directly reachable, attackers can send arbitrary `X-Forwarded-For` values and bypass IP allowlists.
 
-2. **The ingress controller must set X-Forwarded-For correctly.** This is the default behavior for all major ingress controllers, but verify your configuration. For nginx-ingress, this is controlled by `use-forwarded-headers` and `compute-full-forwarded-for` settings.
+2. **The ingress controller or gateway must set X-Forwarded-For correctly.** This is the default behavior for all major ingress controllers and gateways (nginx-ingress, Traefik, Istio, Envoy), but verify your configuration. For nginx-ingress, this is controlled by `use-forwarded-headers` and `compute-full-forwarded-for` settings.
 
-3. **Network policies should enforce the traffic path.** In Kubernetes, use NetworkPolicy to ensure gatekeeper pods only accept traffic from the ingress controller's pods, not from arbitrary sources.
+3. **Network policies should enforce the traffic path.** In Kubernetes, use NetworkPolicy to ensure gatekeeper pods only accept traffic from the ingress controller or gateway pods, not from arbitrary sources.
 
-Example NetworkPolicy:
+Example NetworkPolicy (adjust namespace and labels for your setup):
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -71,6 +77,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    # Allow from nginx-ingress
     - from:
         - namespaceSelector:
             matchLabels:
@@ -78,6 +85,14 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: ingress-nginx
+    # Or allow from Traefik gateway
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: traefik
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
 ```
 
 ## Why We Trust the Leftmost IP
