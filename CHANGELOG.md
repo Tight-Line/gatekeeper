@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Release workflow now publishes amd64 images first for fast availability, then updates to multi-arch
+
 ## [0.1.10] - 2026-01-22
 
 ### Added
