@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `make check` target for pre-release verification (lint, 100% coverage, build)
+- `make test-coverage-check` target that fails if coverage is below 100%
+- Pre-release checklist in AGENTS.md documentation
+
+### Fixed
+- Missing test coverage for X-Forwarded-For edge cases (empty entries, single private IP)
+
 ## [0.1.9] - 2026-01-22
 
 ### Fixed

@@ -1,4 +1,4 @@
-.PHONY: build build-relay build-all test clean run lint lint-fix docker setup-hooks
+.PHONY: build build-relay build-all test test-coverage test-coverage-check clean run lint lint-fix docker setup-hooks check
 
 # Build variables
 VERSION?=0.1.0
@@ -22,10 +22,24 @@ build-all: build build-relay
 test:
 	go test -v ./...
 
-# Run tests with coverage
+# Run tests with coverage (generates report)
 test-coverage:
 	go test -v -coverprofile=coverage.out -tags=ci ./...
 	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+# Run tests and REQUIRE 100% coverage (use before releasing)
+test-coverage-check:
+	@echo "Running tests with coverage check (requires 100%)..."
+	@go test -coverprofile=coverage.out -tags=ci ./...
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	echo "Total coverage: $${COVERAGE}%"; \
+	if [ $$(echo "$$COVERAGE < 100" | bc -l) -eq 1 ]; then \
+		echo "ERROR: Coverage is below 100%"; \
+		go tool cover -func=coverage.out | grep -v "100.0%"; \
+		exit 1; \
+	fi
+	@echo "Coverage check passed: 100%"
 
 # Run the server locally (for development)
 run: build
@@ -74,6 +88,6 @@ setup-hooks:
 	@chmod +x .git/hooks/pre-commit
 	@echo "Pre-commit hook installed successfully."
 
-# Verify everything (used by CI and before committing)
-check: lint test
-	@echo "All checks passed."
+# Verify everything (used by CI and before releasing)
+check: lint test-coverage-check build-all
+	@echo "All checks passed. Ready for release."

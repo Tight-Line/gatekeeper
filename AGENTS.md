@@ -224,8 +224,25 @@ Before adding new entries, review and clean up existing `[Unreleased]` content:
 
 ### Creating Releases
 
-Use `scripts/make-tag <version>` to create a release. This script:
+**IMPORTANT: Before creating any release, you MUST verify 100% test coverage.**
+
+Run `make check` before every release. This single command verifies:
+- Linting passes
+- Tests pass with 100% coverage (will fail if coverage < 100%)
+- All binaries build successfully
+
+```bash
+# Run ALL pre-release checks (REQUIRED before tagging)
+make check
+
+# Only after make check passes, create the release
+scripts/make-tag <version>
+```
+
+The `scripts/make-tag` script:
 1. Runs tests to ensure CI will pass
 2. Updates Helm chart versions
 3. Moves `[Unreleased]` content to a dated release section
 4. Commits and creates the git tag
+
+**DO NOT skip `make check`. CI will reject releases with less than 100% coverage.**

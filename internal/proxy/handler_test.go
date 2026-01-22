@@ -1312,6 +1312,18 @@ func TestGetClientIP_TrustEnabled(t *testing.T) {
 			xForwardedFor: "169.254.1.1, 203.0.113.50",
 			expectedIP:    "203.0.113.50",
 		},
+		{
+			name:          "single private IP - returns it as fallback",
+			remoteAddr:    "10.0.0.1:12345",
+			xForwardedFor: "192.168.1.100",
+			expectedIP:    "192.168.1.100",
+		},
+		{
+			name:          "empty entries in X-Forwarded-For skipped",
+			remoteAddr:    "10.0.0.1:12345",
+			xForwardedFor: "10.0.0.5, , , 203.0.113.50",
+			expectedIP:    "203.0.113.50",
+		},
 	}
 
 	for _, tc := range tests {
