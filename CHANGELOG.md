@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-01-22
+
+### Fixed
+- Strip internal `X-Relay-Stream-ID` header before forwarding to destinations
+- Log `client_ip` instead of `remote_addr` for forwarded/relayed requests (shows real client IP, not load balancer)
+- Release workflow adds Valkey Helm repo before chart-releaser runs
+
 ## [0.2.0] - 2026-01-22
 
 ### Added
