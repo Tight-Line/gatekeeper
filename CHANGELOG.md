@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-22
+
 ### Added
 - Redis/Valkey support for multi-replica relay deployments with at-most-once delivery guarantees
 - Pending message recovery for Redis relay mode (reclaims stuck messages after 60s idle)
