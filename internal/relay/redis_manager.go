@@ -285,106 +285,125 @@ func (m *RedisManager) Poll(ctx context.Context, token string) (*Webhook, error)
 	key := streamKey(token)
 
 	for {
-		// Check context before each iteration
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 
-		// First, check for any pending messages that were claimed but not ACKed
-		// (e.g., from a previous crash)
-		pending, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    consumerGroupName,
-			Consumer: m.consumerID,
-			Streams:  []string{key, "0"}, // "0" means read pending messages
-			Count:    1,
-		}).Result()
-
-		if err != nil && err != redis.Nil {
-			return nil, fmt.Errorf("reading pending messages: %w", err)
+		// First, check for any pending messages (claimed but not ACKed)
+		webhook, err := m.pollPendingMessage(ctx, key)
+		if err != nil {
+			return nil, err
 		}
-
-		// If we have a pending message, process it
-		if len(pending) > 0 && len(pending[0].Messages) > 0 {
-			msg := pending[0].Messages[0]
-			webhook, err := m.parseStreamMessage(msg)
-			// coverage:ignore - pending message corruption can't be simulated (data immutable after claim)
-			if err != nil {
-				// ACK invalid message to prevent infinite loop
-				_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
-				continue
-			}
-
-			if webhook.IsExpired() {
-				// ACK expired webhook and continue to next message
-				_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
-				continue
-			}
-
+		if webhook != nil {
 			return webhook, nil
 		}
 
-		// Calculate block timeout from context deadline
-		blockTimeout := defaultBlockTimeout
-		if deadline, ok := ctx.Deadline(); ok {
-			remaining := time.Until(deadline)
-			if remaining < blockTimeout {
-				blockTimeout = remaining
-			}
-			// coverage:ignore - requires deadline to expire during pending processing (narrow timing window)
-			if blockTimeout <= 0 {
-				return nil, ctx.Err()
-			}
-		}
-
 		// No pending messages, wait for new ones
-		streams, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    consumerGroupName,
-			Consumer: m.consumerID,
-			Streams:  []string{key, ">"}, // ">" means read new messages only
-			Count:    1,
-			Block:    blockTimeout,
-		}).Result()
-
-		if err == redis.Nil {
-			// Block timed out - no messages available
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			// Block timeout reached but context not yet expired - continue to recheck
-			// coverage:ignore - timing edge case: block times out before context expires (rare)
-			continue
-		}
+		webhook, err = m.pollNewMessage(ctx, key)
 		if err != nil {
-			// Check if context was canceled
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			// coverage:ignore - requires XReadGroup error with context still valid (rare race condition)
-			return nil, fmt.Errorf("reading from stream: %w", err)
+			return nil, err
 		}
+		if webhook != nil {
+			return webhook, nil
+		}
+		// No webhook returned means continue polling
+	}
+}
 
-		// coverage:ignore - miniredis returns redis.Nil on timeout, not empty streams
-		if len(streams) == 0 || len(streams[0].Messages) == 0 {
+// pollPendingMessage checks for pending messages that were claimed but not ACKed.
+// Returns (webhook, nil) if a valid webhook is found, (nil, nil) to continue polling,
+// or (nil, error) on failure.
+func (m *RedisManager) pollPendingMessage(ctx context.Context, key string) (*Webhook, error) {
+	pending, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    consumerGroupName,
+		Consumer: m.consumerID,
+		Streams:  []string{key, "0"}, // "0" means read pending messages
+		Count:    1,
+	}).Result()
+
+	if err != nil && err != redis.Nil {
+		return nil, fmt.Errorf("reading pending messages: %w", err)
+	}
+
+	if len(pending) == 0 || len(pending[0].Messages) == 0 {
+		return nil, nil // No pending messages
+	}
+
+	msg := pending[0].Messages[0]
+	return m.processMessage(ctx, key, msg)
+}
+
+// pollNewMessage waits for new messages with appropriate timeout.
+// Returns (webhook, nil) if a valid webhook is found, (nil, nil) to continue polling,
+// or (nil, error) on failure.
+func (m *RedisManager) pollNewMessage(ctx context.Context, key string) (*Webhook, error) {
+	blockTimeout := m.calculateBlockTimeout(ctx)
+	// coverage:ignore - requires deadline to expire during pending processing (narrow timing window)
+	if blockTimeout <= 0 {
+		return nil, ctx.Err()
+	}
+
+	streams, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    consumerGroupName,
+		Consumer: m.consumerID,
+		Streams:  []string{key, ">"}, // ">" means read new messages only
+		Count:    1,
+		Block:    blockTimeout,
+	}).Result()
+
+	if err == redis.Nil {
+		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-
-		msg := streams[0].Messages[0]
-		webhook, err := m.parseStreamMessage(msg)
-		if err != nil {
-			// ACK invalid message to prevent infinite loop
-			_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
-			continue
-		}
-
-		// Check if webhook is expired
-		if webhook.IsExpired() {
-			// ACK expired webhook and continue to next message
-			_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
-			continue
-		}
-
-		return webhook, nil
+		// coverage:ignore - timing edge case: block times out before context expires (rare)
+		return nil, nil // Continue polling
 	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		// coverage:ignore - requires XReadGroup error with context still valid (rare race condition)
+		return nil, fmt.Errorf("reading from stream: %w", err)
+	}
+
+	// coverage:ignore - miniredis returns redis.Nil on timeout, not empty streams
+	if len(streams) == 0 || len(streams[0].Messages) == 0 {
+		return nil, ctx.Err()
+	}
+
+	msg := streams[0].Messages[0]
+	return m.processMessage(ctx, key, msg)
+}
+
+// processMessage parses and validates a stream message.
+// Returns (webhook, nil) if valid, (nil, nil) if message should be skipped,
+// or (nil, error) on parse failure that was handled.
+func (m *RedisManager) processMessage(ctx context.Context, key string, msg redis.XMessage) (*Webhook, error) {
+	webhook, err := m.parseStreamMessage(msg)
+	// coverage:ignore - pending message corruption can't be simulated (data immutable after claim)
+	if err != nil {
+		_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
+		return nil, nil // Skip invalid message
+	}
+
+	if webhook.IsExpired() {
+		_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
+		return nil, nil // Skip expired message
+	}
+
+	return webhook, nil
+}
+
+// calculateBlockTimeout determines how long to block waiting for new messages.
+func (m *RedisManager) calculateBlockTimeout(ctx context.Context) time.Duration {
+	blockTimeout := defaultBlockTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining < blockTimeout {
+			blockTimeout = remaining
+		}
+	}
+	return blockTimeout
 }
 
 // parseStreamMessage extracts a Webhook from a Redis stream message
@@ -495,12 +514,7 @@ func (m *RedisManager) recoverTokenPending(ctx context.Context, token string) {
 
 	// Get pending messages across all consumers
 	pending, err := m.client.XPending(ctx, key, consumerGroupName).Result()
-	if err != nil {
-		// Stream may not exist or have no consumer group - this is normal
-		return
-	}
-
-	if pending.Count == 0 {
+	if err != nil || pending.Count == 0 {
 		return
 	}
 
@@ -525,63 +539,76 @@ func (m *RedisManager) recoverTokenPending(ctx context.Context, token string) {
 		if ctx.Err() != nil {
 			return
 		}
+		m.recoverPendingEntry(ctx, key, token, p)
+	}
+}
 
-		// Skip messages that haven't been idle long enough
-		if p.Idle < pendingIdleTimeout {
-			continue
-		}
+// recoverPendingEntry handles recovery for a single pending message.
+// coverage:ignore - miniredis doesn't simulate XPendingExt idle time and retry counts
+func (m *RedisManager) recoverPendingEntry(ctx context.Context, key, token string, p redis.XPendingExt) {
+	// Skip messages that haven't been idle long enough
+	if p.Idle < pendingIdleTimeout {
+		return
+	}
 
-		// Check if message has exceeded max delivery attempts
-		// coverage:ignore - p.RetryCount check (miniredis doesn't track retry counts)
-		if p.RetryCount >= int64(maxDeliveryAttempts) {
-			// Dead letter: log and ACK to remove from stream
-			m.logger.Warn("dead-lettering webhook after max retries",
-				"token", token,
-				"message_id", p.ID,
-				"consumer", p.Consumer,
-				"retry_count", p.RetryCount,
-				"idle_time", p.Idle,
-			)
-			// coverage:ignore - XAck in dead-letter path (miniredis does not reach this code path)
-			if err := m.client.XAck(ctx, key, consumerGroupName, p.ID).Err(); err != nil {
-				m.logger.Error("failed to ACK dead-lettered message",
-					"token", token,
-					"message_id", p.ID,
-					"error", err,
-				)
-			}
-			// coverage:ignore - continue after dead-letter (miniredis does not reach this code path)
-			continue
-		}
+	// coverage:ignore - miniredis doesn't track retry counts
+	if p.RetryCount >= int64(maxDeliveryAttempts) {
+		m.deadLetterMessage(ctx, key, token, p)
+		return
+	}
 
-		// Reclaim the message for this consumer
-		// coverage:ignore - XClaim call (miniredis does not properly simulate idle time for claiming)
-		claimed, err := m.client.XClaim(ctx, &redis.XClaimArgs{
-			Stream:   key,
-			Group:    consumerGroupName,
-			Consumer: m.consumerID,
-			MinIdle:  pendingIdleTimeout,
-			Messages: []string{p.ID},
-		}).Result()
-		// coverage:ignore - XClaim error handling (miniredis does not reach this code path)
-		if err != nil {
-			m.logger.Error("failed to claim stuck message",
-				"token", token,
-				"message_id", p.ID,
-				"error", err,
-			)
-			continue
-		}
+	// coverage:ignore - miniredis doesn't simulate idle time for claiming
+	m.reclaimMessage(ctx, key, token, p)
+}
 
-		// coverage:ignore - claim success check (miniredis does not reach this code path)
-		if len(claimed) > 0 {
-			m.logger.Info("reclaimed stuck webhook",
-				"token", token,
-				"message_id", p.ID,
-				"previous_consumer", p.Consumer,
-				"retry_count", p.RetryCount+1,
-			)
-		}
+// deadLetterMessage ACKs a message that has exceeded max retry attempts.
+// coverage:ignore - miniredis doesn't track retry counts
+func (m *RedisManager) deadLetterMessage(ctx context.Context, key, token string, p redis.XPendingExt) {
+	m.logger.Warn("dead-lettering webhook after max retries",
+		"token", token,
+		"message_id", p.ID,
+		"consumer", p.Consumer,
+		"retry_count", p.RetryCount,
+		"idle_time", p.Idle,
+	)
+	// coverage:ignore - miniredis doesn't reach this code path
+	if err := m.client.XAck(ctx, key, consumerGroupName, p.ID).Err(); err != nil {
+		m.logger.Error("failed to ACK dead-lettered message",
+			"token", token,
+			"message_id", p.ID,
+			"error", err,
+		)
+	}
+}
+
+// reclaimMessage claims a stuck message for this consumer.
+// coverage:ignore - miniredis doesn't properly simulate idle time for claiming
+func (m *RedisManager) reclaimMessage(ctx context.Context, key, token string, p redis.XPendingExt) {
+	claimed, err := m.client.XClaim(ctx, &redis.XClaimArgs{
+		Stream:   key,
+		Group:    consumerGroupName,
+		Consumer: m.consumerID,
+		MinIdle:  pendingIdleTimeout,
+		Messages: []string{p.ID},
+	}).Result()
+	// coverage:ignore - miniredis doesn't reach this code path
+	if err != nil {
+		m.logger.Error("failed to claim stuck message",
+			"token", token,
+			"message_id", p.ID,
+			"error", err,
+		)
+		return
+	}
+
+	// coverage:ignore - miniredis doesn't reach this code path
+	if len(claimed) > 0 {
+		m.logger.Info("reclaimed stuck webhook",
+			"token", token,
+			"message_id", p.ID,
+			"previous_consumer", p.Consumer,
+			"retry_count", p.RetryCount+1,
+		)
 	}
 }
 
