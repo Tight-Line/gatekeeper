@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -382,11 +383,19 @@ func (h *Handler) handleRelay(w http.ResponseWriter, r *http.Request, ctx *reque
 		return
 	}
 
+	// Record that a webhook was queued for relay
+	metrics.RecordRelayWebhookQueued(ctx.route.RelayToken)
+	deliveryStart := time.Now()
+
 	resp, err := h.relay.DeliverHTTPRequest(r.Context(), ctx.route.RelayToken, r, ctx.body, ctx.route.PreserveHost)
 	if err != nil {
 		h.handleRelayError(w, r, ctx, err)
 		return
 	}
+
+	// Record successful delivery
+	deliveryDuration := time.Since(deliveryStart).Seconds()
+	metrics.RecordRelayWebhookDelivered(ctx.route.RelayToken, deliveryDuration)
 
 	h.writeRelayResponse(w, resp)
 	statusStr := fmt.Sprintf("%d", resp.StatusCode)
@@ -407,10 +416,20 @@ func (h *Handler) handleRelayError(w http.ResponseWriter, r *http.Request, ctx *
 			"path", r.URL.Path,
 			"remote_addr", r.RemoteAddr,
 		)
+		metrics.RecordRelayDeliveryError(ctx.route.RelayToken, "no_client")
 		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "503", time.Since(ctx.start).Seconds())
 		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 		return
 	}
+
+	// Determine error reason
+	reason := "unknown"
+	if errors.Is(err, context.DeadlineExceeded) {
+		reason = "timeout"
+	} else if errors.Is(err, context.Canceled) {
+		reason = "canceled"
+	}
+	metrics.RecordRelayDeliveryError(ctx.route.RelayToken, reason)
 
 	h.logger.Error("relay delivery failed",
 		"hostname", ctx.hostname,

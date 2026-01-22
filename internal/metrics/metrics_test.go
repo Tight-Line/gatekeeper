@@ -73,3 +73,35 @@ func TestRecordValidationFailure(t *testing.T) {
 	RecordValidationFailure("example.com", "json-schema")
 	RecordValidationFailure("example.com", "custom-validator")
 }
+
+func TestRecordRelayWebhookQueued(t *testing.T) {
+	t.Helper()
+	RecordRelayWebhookQueued("token1")
+	RecordRelayWebhookQueued("token2")
+}
+
+func TestRecordRelayWebhookDelivered(t *testing.T) {
+	t.Helper()
+	RecordRelayWebhookDelivered("token1", 0.5)
+	RecordRelayWebhookDelivered("token2", 1.2)
+}
+
+func TestRecordRelayDeliveryError(t *testing.T) {
+	t.Helper()
+	RecordRelayDeliveryError("token1", "timeout")
+	RecordRelayDeliveryError("token1", "no_client")
+	RecordRelayDeliveryError("token2", "unknown")
+}
+
+func TestRecordRelayWebhooksPending(t *testing.T) {
+	t.Helper()
+	RecordRelayWebhooksPending("token1", 5)
+	RecordRelayWebhooksPending("token1", 10)
+	RecordRelayWebhooksPending("token2", 0)
+}
+
+func TestRecordRelayClientsConnected(t *testing.T) {
+	t.Helper()
+	RecordRelayClientsConnected("token1", 2)
+	RecordRelayClientsConnected("token2", 1)
+}
