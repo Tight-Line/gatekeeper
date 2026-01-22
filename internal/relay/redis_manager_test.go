@@ -855,3 +855,155 @@ func TestRedisManager_Deliver_XAddError(t *testing.T) {
 		t.Error("expected error when XAdd fails")
 	}
 }
+
+func TestWebhook_IsExpired(t *testing.T) {
+	tests := []struct {
+		name      string
+		expiresAt int64
+		want      bool
+	}{
+		{"no expiry", 0, false},
+		{"future", time.Now().Add(time.Hour).Unix(), false},
+		{"past", time.Now().Add(-time.Hour).Unix(), true},
+		{"just expired", time.Now().Add(-time.Second).Unix(), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &Webhook{ExpiresAt: tt.expiresAt}
+			if got := w.IsExpired(); got != tt.want {
+				t.Errorf("IsExpired() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisManager_Deliver_SetsExpiry(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Start polling
+	webhookCh := make(chan *Webhook, 1)
+	go func() {
+		webhook, _ := m.Poll(ctx, "token1")
+		webhookCh <- webhook
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Deliver a webhook without expiry set
+	go func() {
+		_, _ = m.Deliver(ctx, "token1", &Webhook{Method: "POST", Path: "/test"})
+	}()
+
+	// Check that the received webhook has expiry set
+	select {
+	case webhook := <-webhookCh:
+		if webhook.ExpiresAt == 0 {
+			t.Error("expected ExpiresAt to be set")
+		}
+		// Should be about 30 seconds in the future
+		expectedMin := time.Now().Add(25 * time.Second).Unix()
+		expectedMax := time.Now().Add(35 * time.Second).Unix()
+		if webhook.ExpiresAt < expectedMin || webhook.ExpiresAt > expectedMax {
+			t.Errorf("ExpiresAt %d not in expected range [%d, %d]", webhook.ExpiresAt, expectedMin, expectedMax)
+		}
+		// Send response to clean up
+		_ = m.SendResponse(&Response{RequestID: webhook.ID, StatusCode: 200})
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for webhook")
+	}
+}
+
+func TestRedisManager_Poll_SkipsExpiredWebhooks(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Directly add an expired webhook to the stream
+	expiredWebhook := &Webhook{
+		ID:        "expired-1",
+		Method:    "POST",
+		Path:      "/expired",
+		ExpiresAt: time.Now().Add(-time.Hour).Unix(), // Already expired
+	}
+	expiredJSON, _ := json.Marshal(expiredWebhook)
+	key := streamKey("token1")
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(expiredJSON)},
+	})
+
+	// Add a valid webhook
+	validWebhook := &Webhook{
+		ID:        "valid-1",
+		Method:    "POST",
+		Path:      "/valid",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(), // Not expired
+	}
+	validJSON, _ := json.Marshal(validWebhook)
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(validJSON)},
+	})
+
+	// Poll should skip the expired webhook and return the valid one
+	webhook, err := m.Poll(ctx, "token1")
+	if err != nil {
+		t.Fatalf("Poll failed: %v", err)
+	}
+
+	if webhook.ID != "valid-1" {
+		t.Errorf("expected valid webhook, got %s", webhook.ID)
+	}
+}
+
+func TestRedisManager_Poll_SkipsInvalidWebhookData(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	key := streamKey("token1")
+
+	// Add invalid webhook data
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": "not-valid-json"},
+	})
+
+	// Add a valid webhook
+	validWebhook := &Webhook{
+		ID:        "valid-1",
+		Method:    "POST",
+		Path:      "/valid",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}
+	validJSON, _ := json.Marshal(validWebhook)
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(validJSON)},
+	})
+
+	// Poll should skip the invalid webhook and return the valid one
+	webhook, err := m.Poll(ctx, "token1")
+	if err != nil {
+		t.Fatalf("Poll failed: %v", err)
+	}
+
+	if webhook.ID != "valid-1" {
+		t.Errorf("expected valid webhook, got %s", webhook.ID)
+	}
+}

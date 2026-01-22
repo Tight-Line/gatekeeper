@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 )
 
 var (
@@ -15,13 +16,27 @@ var (
 	ErrRequestNotFound = errors.New("request not found")
 )
 
+const (
+	// DefaultWebhookExpiry is the default time after which a queued webhook expires
+	DefaultWebhookExpiry = 30 * time.Second
+)
+
 // Webhook represents a webhook request to be delivered via relay
 type Webhook struct {
-	ID      string              `json:"id"`
-	Method  string              `json:"method"`
-	Path    string              `json:"path"`
-	Headers map[string][]string `json:"headers"` // Multi-value headers (like http.Header)
-	Body    string              `json:"body"`    // base64 encoded
+	ID        string              `json:"id"`
+	Method    string              `json:"method"`
+	Path      string              `json:"path"`
+	Headers   map[string][]string `json:"headers"`              // Multi-value headers (like http.Header)
+	Body      string              `json:"body"`                 // base64 encoded
+	ExpiresAt int64               `json:"expires_at,omitempty"` // Unix timestamp, 0 means no expiry
+}
+
+// IsExpired returns true if the webhook has expired
+func (w *Webhook) IsExpired() bool {
+	if w.ExpiresAt == 0 {
+		return false
+	}
+	return time.Now().Unix() > w.ExpiresAt
 }
 
 // Response represents a response from the relay client's destination

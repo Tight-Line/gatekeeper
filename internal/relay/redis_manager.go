@@ -187,6 +187,11 @@ func (m *RedisManager) Deliver(ctx context.Context, token string, webhook *Webho
 		webhook.ID = uuid.New().String()
 	}
 
+	// Set expiry time if not already set
+	if webhook.ExpiresAt == 0 {
+		webhook.ExpiresAt = time.Now().Add(DefaultWebhookExpiry).Unix()
+	}
+
 	// Subscribe to response channel BEFORE adding to stream
 	pubsub := m.client.Subscribe(ctx, responseChannel(webhook.ID))
 	defer pubsub.Close()
@@ -253,6 +258,7 @@ func (m *RedisManager) DeliverHTTPRequest(ctx context.Context, token string, r *
 
 // Poll waits for a webhook to be available for the given token.
 // Uses Redis consumer groups to ensure each webhook is processed by only one consumer.
+// Expired webhooks are automatically acknowledged and skipped.
 func (m *RedisManager) Poll(ctx context.Context, token string) (*Webhook, error) {
 	if !m.IsValidToken(token) {
 		return nil, ErrInvalidToken
@@ -260,64 +266,99 @@ func (m *RedisManager) Poll(ctx context.Context, token string) (*Webhook, error)
 
 	key := streamKey(token)
 
-	// First, check for any pending messages that were claimed but not ACKed
-	// (e.g., from a previous crash)
-	pending, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-		Group:    consumerGroupName,
-		Consumer: m.consumerID,
-		Streams:  []string{key, "0"}, // "0" means read pending messages
-		Count:    1,
-	}).Result()
-
-	if err != nil && err != redis.Nil {
-		return nil, fmt.Errorf("reading pending messages: %w", err)
-	}
-
-	// If we have a pending message, return it
-	if len(pending) > 0 && len(pending[0].Messages) > 0 {
-		msg := pending[0].Messages[0]
-		return m.parseStreamMessage(msg)
-	}
-
-	// Calculate block timeout from context deadline
-	blockTimeout := defaultBlockTimeout
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline)
-		if remaining < blockTimeout {
-			blockTimeout = remaining
-		}
-		if blockTimeout <= 0 {
-			return nil, ctx.Err()
-		}
-	}
-
-	// No pending messages, wait for new ones
-	streams, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-		Group:    consumerGroupName,
-		Consumer: m.consumerID,
-		Streams:  []string{key, ">"}, // ">" means read new messages only
-		Count:    1,
-		Block:    blockTimeout,
-	}).Result()
-
-	if err == redis.Nil {
-		// Timeout - no messages available
-		return nil, ctx.Err()
-	}
-	if err != nil {
-		// Check if context was canceled
+	for {
+		// Check context before each iteration
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("reading from stream: %w", err)
-	}
 
-	if len(streams) == 0 || len(streams[0].Messages) == 0 {
-		return nil, ctx.Err()
-	}
+		// First, check for any pending messages that were claimed but not ACKed
+		// (e.g., from a previous crash)
+		pending, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    consumerGroupName,
+			Consumer: m.consumerID,
+			Streams:  []string{key, "0"}, // "0" means read pending messages
+			Count:    1,
+		}).Result()
 
-	msg := streams[0].Messages[0]
-	return m.parseStreamMessage(msg)
+		if err != nil && err != redis.Nil {
+			return nil, fmt.Errorf("reading pending messages: %w", err)
+		}
+
+		// If we have a pending message, process it
+		if len(pending) > 0 && len(pending[0].Messages) > 0 {
+			msg := pending[0].Messages[0]
+			webhook, err := m.parseStreamMessage(msg)
+			if err != nil {
+				// ACK invalid message to prevent infinite loop
+				_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
+				continue
+			}
+
+			// Check if webhook is expired
+			if webhook.IsExpired() {
+				// ACK expired webhook and continue to next message
+				_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
+				continue
+			}
+
+			return webhook, nil
+		}
+
+		// Calculate block timeout from context deadline
+		blockTimeout := defaultBlockTimeout
+		if deadline, ok := ctx.Deadline(); ok {
+			remaining := time.Until(deadline)
+			if remaining < blockTimeout {
+				blockTimeout = remaining
+			}
+			if blockTimeout <= 0 {
+				return nil, ctx.Err()
+			}
+		}
+
+		// No pending messages, wait for new ones
+		streams, err := m.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    consumerGroupName,
+			Consumer: m.consumerID,
+			Streams:  []string{key, ">"}, // ">" means read new messages only
+			Count:    1,
+			Block:    blockTimeout,
+		}).Result()
+
+		if err == redis.Nil {
+			// Timeout - no messages available
+			return nil, ctx.Err()
+		}
+		if err != nil {
+			// Check if context was canceled
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("reading from stream: %w", err)
+		}
+
+		if len(streams) == 0 || len(streams[0].Messages) == 0 {
+			return nil, ctx.Err()
+		}
+
+		msg := streams[0].Messages[0]
+		webhook, err := m.parseStreamMessage(msg)
+		if err != nil {
+			// ACK invalid message to prevent infinite loop
+			_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
+			continue
+		}
+
+		// Check if webhook is expired
+		if webhook.IsExpired() {
+			// ACK expired webhook and continue to next message
+			_ = m.client.XAck(ctx, key, consumerGroupName, msg.ID).Err()
+			continue
+		}
+
+		return webhook, nil
+	}
 }
 
 // parseStreamMessage extracts a Webhook from a Redis stream message
