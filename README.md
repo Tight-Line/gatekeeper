@@ -49,7 +49,7 @@ The traditional general-purpose approach is to open firewall ports for each webh
 
 ## Solution
 
-Gatekeeper is a webhook authentication proxy. It is the only component exposed to the public internet. Your internal services never need direct internet exposure.
+Gatekeeper is a webhook authentication, authorization, and validation proxy. It is the only component exposed to the public internet. Your internal services never need direct internet exposure.
 
 For each incoming webhook request, gatekeeper:
 
