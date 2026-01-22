@@ -249,3 +249,22 @@ The `scripts/make-tag` script:
 4. Commits and creates the git tag
 
 **DO NOT skip `make check`. CI will reject releases with less than 100% coverage.**
+
+## Test Coverage Exclusions
+
+The project enforces 100% test coverage. In rare cases, specific lines may be marked as excluded from coverage requirements using `// coverage:ignore - <reason>` comments.
+
+**When to use `coverage:ignore`:**
+1. Code that is genuinely unreachable with the test infrastructure (e.g., Redis behaviors that miniredis doesn't simulate)
+2. Only when the developer explicitly requests it
+
+**When NOT to use `coverage:ignore`:**
+- Code that is merely difficult to test - write the test instead
+- Code that could be tested with better test design
+- As a shortcut to avoid writing tests
+
+**Never suggest or add `coverage:ignore` comments unless:**
+1. You have thoroughly investigated and confirmed the code path is truly untestable with available tools, OR
+2. The developer explicitly asks you to mark specific code as untestable
+
+The `scripts/check-coverage.sh` script validates that all uncovered lines have a `coverage:ignore` comment with a reason. For Codecov integration, use `--codecov` flag to generate a filtered coverage file.

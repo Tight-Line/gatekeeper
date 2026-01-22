@@ -943,3 +943,96 @@ func TestPoller_Run_GracefulShutdownWaitsForWorkers(t *testing.T) {
 		t.Fatal("Run didn't return after workers finished")
 	}
 }
+
+func TestPoller_Run_ContextCancelledDuringDispatch(t *testing.T) {
+	// Test the case where context is canceled while trying to dispatch
+	// a webhook to the worker channel (when channel is full and workers are busy)
+	//
+	// With 1 worker and channel capacity 1:
+	// - Webhook 1: Worker picks it up and starts processing (blocks on workerBlocking)
+	// - Webhook 2: Goes into the channel buffer (channel now full)
+	// - Webhook 3: Tries to dispatch but channel is full, blocks in select
+	// - Cancel context: Should trigger the ctx.Done case in dispatch select
+
+	workerStarted := make(chan struct{})
+	workerBlocking := make(chan struct{})
+
+	// Local destination that blocks until we signal
+	localServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case workerStarted <- struct{}{}:
+		default:
+		}
+		<-workerBlocking // Block until signaled
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer localServer.Close()
+
+	var pollCount int32
+	relayServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/relay/poll" {
+			count := atomic.AddInt32(&pollCount, 1)
+			// Return webhooks for first THREE polls
+			if count <= 3 {
+				webhook := &Webhook{
+					ID:      fmt.Sprintf("webhook-%d", count),
+					Method:  "POST",
+					Path:    "/test",
+					Headers: map[string][]string{},
+					Body:    base64.StdEncoding.EncodeToString([]byte(`{}`)),
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(webhook)
+				return
+			}
+			// Block subsequent polls until context canceled
+			<-r.Context().Done()
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if r.URL.Path == "/relay/response" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}))
+	defer relayServer.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	forwarder := NewForwarder(localServer.URL, "test", logger)
+	// Use only 1 worker with channel capacity 1
+	p := NewPoller(relayServer.URL, "test-token", "test-channel", forwarder, logger, 5, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- p.Run(ctx)
+	}()
+
+	// Wait for worker to be busy processing first webhook
+	select {
+	case <-workerStarted:
+		// Worker is now busy with webhook 1
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for worker to start")
+	}
+
+	// Give time for:
+	// - Webhook 2 to be polled and put in channel (fills channel)
+	// - Webhook 3 to be polled and block on dispatch
+	time.Sleep(100 * time.Millisecond)
+
+	// Cancel context while dispatch of webhook 3 is blocked
+	cancel()
+
+	// Signal worker to finish so it can process remaining
+	close(workerBlocking)
+
+	// Wait for Run to return
+	select {
+	case <-done:
+		// Good - Run exited due to context cancel during dispatch
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run didn't return after context cancel")
+	}
+}

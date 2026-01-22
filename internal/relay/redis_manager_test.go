@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -1183,4 +1184,307 @@ func TestRedisManager_RecoverTokenPending_NoPendingCount(t *testing.T) {
 
 	// Recover should exit early since pending count is 0
 	m.recoverTokenPending(ctx, "token1")
+}
+
+func TestRedisManager_RecoverTokenPending_XPendingExtError(t *testing.T) {
+	s := miniredis.RunT(t)
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx := context.Background()
+	key := streamKey("token1")
+
+	// Add and claim a message to create pending entry
+	webhook := &Webhook{ID: "pending-ext-error", Method: "POST", Path: "/test"}
+	webhookJSON, _ := json.Marshal(webhook)
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(webhookJSON)},
+	})
+
+	// Poll to claim message
+	pollCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	_, _ = m.Poll(pollCtx, "token1")
+
+	// Close server to cause XPendingExt error
+	s.Close()
+
+	// Should log error but not panic
+	m.recoverTokenPending(ctx, "token1")
+}
+
+func TestRedisManager_RecoverTokenPending_LoopContextCancel(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+	m.RegisterToken("token2")
+	m.RegisterToken("token3")
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel after first token might be processed
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	// Should exit early when context is canceled during loop
+	m.recoverPendingMessages(ctx)
+}
+
+func TestRedisManager_Poll_NewMessagesExpired(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	key := streamKey("token1")
+
+	// Add only expired webhooks - Poll should skip them all and timeout
+	for i := 0; i < 3; i++ {
+		expiredWebhook := &Webhook{
+			ID:        fmt.Sprintf("expired-%d", i),
+			Method:    "POST",
+			Path:      "/expired",
+			ExpiresAt: time.Now().Add(-time.Hour).Unix(), // Already expired
+		}
+		expiredJSON, _ := json.Marshal(expiredWebhook)
+		m.client.XAdd(ctx, &redis.XAddArgs{
+			Stream: key,
+			Values: map[string]any{"webhook": string(expiredJSON)},
+		})
+	}
+
+	// Use short timeout - should exhaust all expired webhooks then timeout
+	pollCtx, pollCancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer pollCancel()
+
+	_, err := m.Poll(pollCtx, "token1")
+	// Should timeout after processing all expired webhooks
+	if err == nil {
+		t.Error("expected timeout error")
+	}
+}
+
+func TestRedisManager_Poll_ServerErrorDuringNewRead(t *testing.T) {
+	s := miniredis.RunT(t)
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	// Close server after a short delay to cause error during XREADGROUP
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		s.Close()
+	}()
+
+	_, err := m.Poll(ctx, "token1")
+	// Should return error
+	if err == nil {
+		t.Error("expected error when server closes during read")
+	}
+}
+
+func TestRedisManager_ConnectedCount_WithTokens(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	// Add multiple tokens
+	for i := 0; i < 5; i++ {
+		m.RegisterToken(fmt.Sprintf("token%d", i))
+	}
+
+	// Without consumers, count should be 0
+	count := m.ConnectedCount()
+	if count != 0 {
+		t.Errorf("expected 0, got %d", count)
+	}
+}
+
+func TestRedisManager_Deliver_GeneratesID(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Start polling
+	webhookCh := make(chan *Webhook, 1)
+	go func() {
+		webhook, _ := m.Poll(ctx, "token1")
+		webhookCh <- webhook
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Deliver a webhook without ID - should generate one
+	go func() {
+		_, _ = m.Deliver(ctx, "token1", &Webhook{Method: "POST", Path: "/test"})
+	}()
+
+	select {
+	case webhook := <-webhookCh:
+		if webhook.ID == "" {
+			t.Error("expected ID to be generated")
+		}
+		// Send response to clean up
+		_ = m.SendResponse(&Response{RequestID: webhook.ID, StatusCode: 200})
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for webhook")
+	}
+}
+
+func TestRedisManager_StartRecovery_TickerFires(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	// Use a very short recovery interval to test the ticker fires
+	m.recoveryInterval = 10 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start recovery
+	m.StartRecovery(ctx)
+
+	// Wait for at least one tick to fire
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel and wait for shutdown
+	cancel()
+
+	select {
+	case <-m.recoveryDone:
+		// Good
+	case <-time.After(time.Second):
+		t.Error("recovery didn't stop")
+	}
+}
+
+func TestRedisManager_Poll_ExpiredPendingMessage(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx := context.Background()
+	key := streamKey("token1")
+
+	// Add a webhook that will expire very soon (ExpiresAt is in the past by the time we poll again)
+	// We set ExpiresAt to now+1s, then wait 2s before re-polling so that now > ExpiresAt
+	soonExpiringWebhook := &Webhook{
+		ID:        "will-expire-soon",
+		Method:    "POST",
+		Path:      "/test",
+		ExpiresAt: time.Now().Unix() + 1, // Expires 1 second from now (Unix granularity)
+	}
+	soonJSON, _ := json.Marshal(soonExpiringWebhook)
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(soonJSON)},
+	})
+
+	// Poll to claim the message - it's NOT expired yet
+	pollCtx1, cancel1 := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel1()
+	result1, err := m.Poll(pollCtx1, "token1")
+	if err != nil {
+		t.Fatalf("first poll failed: %v", err)
+	}
+	if result1.ID != "will-expire-soon" {
+		t.Errorf("expected 'will-expire-soon', got %s", result1.ID)
+	}
+	// DON'T ACK the webhook - leave it in pending state
+
+	// Wait long enough for the webhook to expire (need now > ExpiresAt, so wait 2+ seconds)
+	time.Sleep(2100 * time.Millisecond)
+
+	// Add a valid message
+	validWebhook := &Webhook{
+		ID:        "valid-after-expired-pending",
+		Method:    "POST",
+		Path:      "/valid",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}
+	validJSON, _ := json.Marshal(validWebhook)
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(validJSON)},
+	})
+
+	// Poll again - should find pending message (now expired), skip it via line 315-318, then get valid
+	pollCtx2, cancel2 := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel2()
+	webhook, err := m.Poll(pollCtx2, "token1")
+	if err != nil {
+		t.Fatalf("Poll failed: %v", err)
+	}
+	if webhook.ID != "valid-after-expired-pending" {
+		t.Errorf("expected valid webhook, got %s", webhook.ID)
+	}
+}
+
+func TestRedisManager_Poll_BlockTimeoutNearZero(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	// Create a context with deadline just barely in the future (50ms)
+	// The default block timeout is 30s, so this should be less
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	// Poll - should use the short deadline and timeout
+	_, err := m.Poll(ctx, "token1")
+	if err == nil {
+		t.Error("expected timeout error")
+	}
+}
+
+func TestRedisManager_RecoverPendingMessages_ContextCanceledDuringLoop(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	// Register several tokens
+	for i := 0; i < 10; i++ {
+		m.RegisterToken(fmt.Sprintf("token%d", i))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start recovery in background and cancel during loop
+	done := make(chan struct{})
+	go func() {
+		// Give SMembers time to complete, then cancel during token loop
+		time.Sleep(5 * time.Millisecond)
+		cancel()
+	}()
+
+	go func() {
+		m.recoverPendingMessages(ctx)
+		close(done)
+	}()
+
+	// Should complete quickly after cancel
+	select {
+	case <-done:
+		// Good
+	case <-time.After(time.Second):
+		t.Error("recovery didn't stop after context cancel")
+	}
 }
