@@ -119,6 +119,8 @@ Configuration can be loaded from file or from environment variables:
 
 If the env var is set (contains full YAML), the file path is ignored. The Helm charts use the env var approach to inject ConfigMap content directly.
 
+For multi-replica relay deployments, gatekeeperd also reads `GATEKEEPERD_REDIS_URI` to connect to Redis/Valkey for webhook queue coordination. See [docs/CONCURRENCY.md](docs/CONCURRENCY.md) for details.
+
 ### Configuration
 
 Configuration uses YAML with environment variable interpolation. Secrets should never appear in config files directly; use ${VAR_NAME} syntax.
@@ -142,6 +144,7 @@ ip_allowlists:
 - Verifier interface: internal/verifier/verifier.go
 - HTTP handler: internal/proxy/handler.go
 - Relay manager: internal/relay/manager.go
+- Redis relay manager: internal/relay/redis_manager.go
 - Relay handler: internal/relay/handler.go
 - Example config: config/example.yaml
 - K8s manifests: k8s/
