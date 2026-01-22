@@ -14,3 +14,9 @@ keywords:
 maintainers:
   - name: Tight Line
     email: certs@example.com
+dependencies:
+  - name: valkey
+    version: "~2.0"
+    repository: "oci://registry-1.docker.io/bitnamicharts"
+    condition: redis.enabled,redis.bundled
+    alias: valkey

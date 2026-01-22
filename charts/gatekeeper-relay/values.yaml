@@ -23,9 +23,11 @@ channels: []
 #  - name: slack-webhooks
 #    tokenKey: RELAY_TOKEN_SLACK        # Key in secrets/existingSecret
 #    destination: http://backend:8080/webhooks/slack
+#    workers: 10                         # Concurrent webhook processors (default: 1)
 #  - name: github-webhooks
 #    tokenKey: RELAY_TOKEN_GITHUB
 #    destination: http://backend:8080/webhooks/github
+#    workers: 5
 
 # Secret values (will be created as a Secret)
 # Use existingSecret instead if secrets are managed externally

@@ -14,4 +14,7 @@ data:
       - name: {{ .name | quote }}
         token: ${{ "{" }}{{ .tokenKey }}{{ "}" }}
         destination: {{ .destination | quote }}
+        {{- if .workers }}
+        workers: {{ .workers }}
+        {{- end }}
       {{- end }}
