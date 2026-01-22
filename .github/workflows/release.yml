@@ -34,7 +34,31 @@ jobs:
           echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
 
-      - name: Build and push gatekeeperd
+      # Build amd64 first for fast availability (native build, ~2 min)
+      - name: Build and push gatekeeperd (amd64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:${{ steps.meta.outputs.VERSION }}
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:latest
+          platforms: linux/amd64
+
+      - name: Build and push gatekeeper-relay (amd64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.relay
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:${{ steps.meta.outputs.VERSION }}
+            ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:latest
+          platforms: linux/amd64
+
+      # Then build multi-arch (updates tags in-place with manifest)
+      - name: Build and push gatekeeperd (multi-arch)
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -45,7 +69,7 @@ jobs:
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:latest
           platforms: linux/amd64,linux/arm64
 
-      - name: Build and push gatekeeper-relay
+      - name: Build and push gatekeeper-relay (multi-arch)
         uses: docker/build-push-action@v5
         with:
           context: .
