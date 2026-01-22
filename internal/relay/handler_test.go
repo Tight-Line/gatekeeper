@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-func newTestHandler() (*Handler, *Manager) {
+func newTestHandler() (*Handler, *MemoryManager) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	manager := NewManager()
+	manager := NewMemoryManager()
 	handler := NewHandler(manager, logger)
 	handler.SetPollTimeout(100 * time.Millisecond) // Short timeout for tests
 	return handler, manager

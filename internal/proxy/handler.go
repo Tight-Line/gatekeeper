@@ -46,7 +46,7 @@ type Handler struct {
 	verifierTypes      map[string]string // verifier name -> type (e.g., "slack", "github")
 	validators         map[string]validator.Validator
 	filters            *ipfilter.FilterSet
-	relay              *relay.Manager
+	relay              relay.Manager
 	logger             *slog.Logger
 	trustXForwardedFor bool
 	maxBodySize        int64
@@ -104,7 +104,7 @@ func NewHandler(cfg *config.Config, filters *ipfilter.FilterSet, logger *slog.Lo
 }
 
 // SetRelayManager sets the relay manager for handling relay delivery
-func (h *Handler) SetRelayManager(rm *relay.Manager) {
+func (h *Handler) SetRelayManager(rm relay.Manager) {
 	h.relay = rm
 }
 

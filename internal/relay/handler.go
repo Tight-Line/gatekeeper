@@ -18,13 +18,13 @@ const (
 
 // Handler handles HTTP requests for the relay protocol
 type Handler struct {
-	manager     *Manager
+	manager     Manager
 	logger      *slog.Logger
 	pollTimeout time.Duration
 }
 
 // NewHandler creates a new relay HTTP handler
-func NewHandler(manager *Manager, logger *slog.Logger) *Handler {
+func NewHandler(manager Manager, logger *slog.Logger) *Handler {
 	return &Handler{
 		manager:     manager,
 		logger:      logger,
