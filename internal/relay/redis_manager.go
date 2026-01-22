@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -31,6 +32,11 @@ const (
 
 	// Default timeout for blocking operations
 	defaultBlockTimeout = 30 * time.Second
+
+	// Recovery settings
+	recoveryInterval    = 30 * time.Second // How often to check for stuck messages
+	pendingIdleTimeout  = 60 * time.Second // How long a message can be pending before reclaim
+	maxDeliveryAttempts = 3                // Max retries before dead letter
 )
 
 // RedisManager is a Redis-backed implementation of Manager.
@@ -39,9 +45,14 @@ const (
 type RedisManager struct {
 	client     redis.UniversalClient
 	consumerID string // Unique ID for this instance: {hostname}-{uuid}
+	logger     *slog.Logger
 
 	mu     sync.RWMutex
 	tokens map[string]bool // Local cache of registered tokens
+
+	// Recovery goroutine management
+	recoveryCancel context.CancelFunc
+	recoveryDone   chan struct{}
 }
 
 // getHostname is a variable to allow testing
@@ -49,7 +60,7 @@ var getHostname = os.Hostname
 
 // NewRedisManager creates a new Redis-backed relay manager.
 // The URI supports redis://, rediss://, valkey://, and valkeys:// schemes.
-func NewRedisManager(uri string) (*RedisManager, error) {
+func NewRedisManager(uri string, logger *slog.Logger) (*RedisManager, error) {
 	opts, err := parseRedisURI(uri)
 	if err != nil {
 		return nil, fmt.Errorf("parsing redis URI: %w", err)
@@ -71,9 +82,14 @@ func NewRedisManager(uri string) (*RedisManager, error) {
 	}
 	consumerID := fmt.Sprintf("%s-%s", hostname, uuid.New().String()[:8])
 
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &RedisManager{
 		client:     client,
 		consumerID: consumerID,
+		logger:     logger,
 		tokens:     make(map[string]bool),
 	}, nil
 }
@@ -412,8 +428,142 @@ func (m *RedisManager) AckWebhook(token, streamID string) error {
 
 // Shutdown cleans up resources
 func (m *RedisManager) Shutdown() {
+	// Stop recovery goroutine if running
+	if m.recoveryCancel != nil {
+		m.recoveryCancel()
+		<-m.recoveryDone
+	}
+
 	if m.client != nil {
 		m.client.Close()
+	}
+}
+
+// StartRecovery starts a background goroutine that periodically scans for
+// stuck messages (messages claimed but not ACKed) and reclaims them for
+// reprocessing. Messages that exceed maxDeliveryAttempts are dead-lettered.
+func (m *RedisManager) StartRecovery(ctx context.Context) {
+	recoveryCtx, cancel := context.WithCancel(ctx)
+	m.recoveryCancel = cancel
+	m.recoveryDone = make(chan struct{})
+
+	go func() {
+		defer close(m.recoveryDone)
+
+		ticker := time.NewTicker(recoveryInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-recoveryCtx.Done():
+				return
+			case <-ticker.C:
+				m.recoverPendingMessages(recoveryCtx)
+			}
+		}
+	}()
+}
+
+// recoverPendingMessages scans all token streams for stuck messages and reclaims them.
+func (m *RedisManager) recoverPendingMessages(ctx context.Context) {
+	// Get all registered tokens
+	tokens, err := m.client.SMembers(ctx, keyPrefixTokens).Result()
+	if err != nil {
+		m.logger.Error("failed to get tokens for recovery", "error", err)
+		return
+	}
+
+	for _, token := range tokens {
+		if ctx.Err() != nil {
+			return
+		}
+		m.recoverTokenPending(ctx, token)
+	}
+}
+
+// recoverTokenPending recovers stuck messages for a specific token's stream.
+func (m *RedisManager) recoverTokenPending(ctx context.Context, token string) {
+	key := streamKey(token)
+
+	// Get pending messages across all consumers
+	pending, err := m.client.XPending(ctx, key, consumerGroupName).Result()
+	if err != nil {
+		// Stream may not exist or have no consumer group - this is normal
+		return
+	}
+
+	if pending.Count == 0 {
+		return
+	}
+
+	// Get detailed pending info to check idle time and delivery count
+	pendingExt, err := m.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream: key,
+		Group:  consumerGroupName,
+		Start:  "-",
+		End:    "+",
+		Count:  100, // Process up to 100 stuck messages per cycle
+	}).Result()
+	if err != nil {
+		m.logger.Error("failed to get pending details", "token", token, "error", err)
+		return
+	}
+
+	for _, p := range pendingExt {
+		if ctx.Err() != nil {
+			return
+		}
+
+		// Skip messages that haven't been idle long enough
+		if p.Idle < pendingIdleTimeout {
+			continue
+		}
+
+		// Check if message has exceeded max delivery attempts
+		if p.RetryCount >= int64(maxDeliveryAttempts) {
+			// Dead letter: log and ACK to remove from stream
+			m.logger.Warn("dead-lettering webhook after max retries",
+				"token", token,
+				"message_id", p.ID,
+				"consumer", p.Consumer,
+				"retry_count", p.RetryCount,
+				"idle_time", p.Idle,
+			)
+			if err := m.client.XAck(ctx, key, consumerGroupName, p.ID).Err(); err != nil {
+				m.logger.Error("failed to ACK dead-lettered message",
+					"token", token,
+					"message_id", p.ID,
+					"error", err,
+				)
+			}
+			continue
+		}
+
+		// Reclaim the message for this consumer
+		claimed, err := m.client.XClaim(ctx, &redis.XClaimArgs{
+			Stream:   key,
+			Group:    consumerGroupName,
+			Consumer: m.consumerID,
+			MinIdle:  pendingIdleTimeout,
+			Messages: []string{p.ID},
+		}).Result()
+		if err != nil {
+			m.logger.Error("failed to claim stuck message",
+				"token", token,
+				"message_id", p.ID,
+				"error", err,
+			)
+			continue
+		}
+
+		if len(claimed) > 0 {
+			m.logger.Info("reclaimed stuck webhook",
+				"token", token,
+				"message_id", p.ID,
+				"previous_consumer", p.Consumer,
+				"retry_count", p.RetryCount+1,
+			)
+		}
 	}
 }
 

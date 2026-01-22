@@ -17,7 +17,7 @@ func newTestRedisManager(t *testing.T) (*RedisManager, *miniredis.Miniredis) {
 
 	s := miniredis.RunT(t)
 
-	m, err := NewRedisManager("redis://" + s.Addr())
+	m, err := NewRedisManager("redis://"+s.Addr(), nil)
 	if err != nil {
 		t.Fatalf("failed to create redis manager: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestRedisManager_NewRedisManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m, err := NewRedisManager(tt.uri)
+			m, err := NewRedisManager(tt.uri, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewRedisManager() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -79,7 +79,7 @@ func TestRedisManager_IsValidToken_CrossReplica(t *testing.T) {
 	defer s.Close()
 
 	// Create first manager and register token
-	m1, err := NewRedisManager("redis://" + s.Addr())
+	m1, err := NewRedisManager("redis://"+s.Addr(), nil)
 	if err != nil {
 		t.Fatalf("failed to create first redis manager: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestRedisManager_IsValidToken_CrossReplica(t *testing.T) {
 	m1.RegisterToken("shared-token")
 
 	// Create second manager (simulating another replica)
-	m2, err := NewRedisManager("redis://" + s.Addr())
+	m2, err := NewRedisManager("redis://"+s.Addr(), nil)
 	if err != nil {
 		t.Fatalf("failed to create second redis manager: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestRedisManager_StreamMessageParsing_Invalid(t *testing.T) {
 
 func TestRedisManager_IsValidToken_ServerClosed(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	// Close the server before checking token
@@ -451,7 +451,7 @@ func TestRedisManager_IsValidToken_ServerClosed(t *testing.T) {
 
 func TestRedisManager_IsConnected_ServerClosed(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	m.RegisterToken("token1")
@@ -467,7 +467,7 @@ func TestRedisManager_IsConnected_ServerClosed(t *testing.T) {
 
 func TestRedisManager_TokenCount_ServerClosed(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	// Register a token in local cache
@@ -487,7 +487,7 @@ func TestRedisManager_TokenCount_ServerClosed(t *testing.T) {
 
 func TestRedisManager_ConnectedCount_ServerClosed(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	m.RegisterToken("token1")
@@ -576,7 +576,7 @@ func TestRedisManager_Poll_ContextCanceled(t *testing.T) {
 
 func TestRedisManager_Poll_ServerClosed(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	m.RegisterToken("token1")
@@ -661,7 +661,7 @@ func TestRedisManager_Poll_EmptyStreamsResult(t *testing.T) {
 
 func TestRedisManager_SendResponse_ServerClosed(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	// Close the server
@@ -679,7 +679,7 @@ func TestRedisManager_SendResponse_ServerClosed(t *testing.T) {
 
 func TestRedisManager_Deliver_ServerClosedDuringXAdd(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	m.RegisterToken("token1")
@@ -752,7 +752,7 @@ func TestRedisManager_ConnectedCount_MultipleTokens(t *testing.T) {
 
 func TestRedisManager_Poll_XReadGroupError(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	m.RegisterToken("token1")
@@ -775,7 +775,7 @@ func TestRedisManager_Poll_XReadGroupError(t *testing.T) {
 
 func TestRedisManager_Poll_ReadPendingError(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	m.RegisterToken("token1")
@@ -804,7 +804,7 @@ func TestRedisManager_EmptyHostname(t *testing.T) {
 	}
 	defer func() { getHostname = originalGetHostname }()
 
-	m, err := NewRedisManager("redis://" + s.Addr())
+	m, err := NewRedisManager("redis://"+s.Addr(), nil)
 	if err != nil {
 		t.Fatalf("failed to create manager: %v", err)
 	}
@@ -835,7 +835,7 @@ func TestRedisManager_Poll_BlockTimeoutZeroImmediate(t *testing.T) {
 
 func TestRedisManager_Deliver_XAddError(t *testing.T) {
 	s := miniredis.RunT(t)
-	m, _ := NewRedisManager("redis://" + s.Addr())
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
 	defer m.Shutdown()
 
 	m.RegisterToken("token1")
@@ -1006,4 +1006,181 @@ func TestRedisManager_Poll_SkipsInvalidWebhookData(t *testing.T) {
 	if webhook.ID != "valid-1" {
 		t.Errorf("expected valid webhook, got %s", webhook.ID)
 	}
+}
+
+func TestRedisManager_StartRecovery(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start recovery
+	m.StartRecovery(ctx)
+
+	// Verify recovery goroutine is running by checking that done channel exists
+	if m.recoveryDone == nil {
+		t.Error("expected recoveryDone channel to be set")
+	}
+
+	// Cancel context and verify recovery stops
+	cancel()
+
+	// Wait for recovery to stop (with timeout)
+	select {
+	case <-m.recoveryDone:
+		// Good - recovery stopped
+	case <-time.After(time.Second):
+		t.Error("recovery goroutine didn't stop after cancel")
+	}
+}
+
+func TestRedisManager_RecoverPendingMessages_NoPending(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx := context.Background()
+
+	// Should not error with no pending messages
+	m.recoverPendingMessages(ctx)
+}
+
+func TestRedisManager_RecoverPendingMessages_ServerClosed(t *testing.T) {
+	s := miniredis.RunT(t)
+	m, _ := NewRedisManager("redis://"+s.Addr(), nil)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	// Close server
+	s.Close()
+
+	ctx := context.Background()
+
+	// Should not panic with server closed
+	m.recoverPendingMessages(ctx)
+}
+
+func TestRedisManager_RecoverTokenPending_NoStream(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	ctx := context.Background()
+
+	// Should not error when stream doesn't exist
+	m.recoverTokenPending(ctx, "nonexistent-token")
+}
+
+func TestRedisManager_Shutdown_StopsRecovery(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+
+	ctx := context.Background()
+	m.StartRecovery(ctx)
+
+	// Shutdown should stop recovery
+	m.Shutdown()
+
+	// Verify recovery channel is closed (would panic if we tried to close it again)
+	select {
+	case <-m.recoveryDone:
+		// Good - recovery stopped
+	default:
+		t.Error("recovery goroutine didn't stop on shutdown")
+	}
+}
+
+func TestRedisManager_RecoverPendingMessages_ContextCanceled(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+	m.RegisterToken("token2")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Should return early when context is canceled
+	m.recoverPendingMessages(ctx)
+}
+
+func TestRedisManager_RecoverTokenPending_ContextCanceled(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Should return early when context is canceled
+	m.recoverTokenPending(ctx, "token1")
+}
+
+func TestRedisManager_RecoverTokenPending_WithPendingMessages(t *testing.T) {
+	s := miniredis.RunT(t)
+	defer s.Close()
+
+	// Create first manager to claim a message
+	m1, err := NewRedisManager("redis://"+s.Addr(), nil)
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
+	}
+	defer m1.Shutdown()
+
+	m1.RegisterToken("token1")
+
+	ctx := context.Background()
+	key := streamKey("token1")
+
+	// Add a webhook message
+	webhook := &Webhook{
+		ID:        "pending-recovery-test",
+		Method:    "POST",
+		Path:      "/test",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}
+	webhookJSON, _ := json.Marshal(webhook)
+	m1.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(webhookJSON)},
+	})
+
+	// Poll to claim the message (but don't ACK it)
+	pollCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	_, _ = m1.Poll(pollCtx, "token1")
+
+	// Create second manager for recovery
+	m2, err := NewRedisManager("redis://"+s.Addr(), nil)
+	if err != nil {
+		t.Fatalf("failed to create second manager: %v", err)
+	}
+	defer m2.Shutdown()
+
+	// Try to recover - miniredis may not fully support XPENDING/XCLAIM behavior,
+	// but this exercises the code path
+	m2.recoverTokenPending(ctx, "token1")
+}
+
+func TestRedisManager_RecoverTokenPending_NoPendingCount(t *testing.T) {
+	m, _ := newTestRedisManager(t)
+	defer m.Shutdown()
+
+	m.RegisterToken("token1")
+
+	ctx := context.Background()
+	key := streamKey("token1")
+
+	// Add a message but don't claim it - so pending count is 0
+	webhook := &Webhook{ID: "unclaimed", Method: "POST", Path: "/test"}
+	webhookJSON, _ := json.Marshal(webhook)
+	m.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: key,
+		Values: map[string]any{"webhook": string(webhookJSON)},
+	})
+
+	// Recover should exit early since pending count is 0
+	m.recoverTokenPending(ctx, "token1")
 }

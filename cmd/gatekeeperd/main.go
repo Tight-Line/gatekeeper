@@ -159,10 +159,12 @@ func setupRelayManager(cfg *config.Config, handler *proxy.Handler, logger *slog.
 	var relayManager relay.Manager
 	if redisURI != "" {
 		// Redis/Valkey mode for multi-replica support
-		redisManager, err := relay.NewRedisManager(redisURI)
+		redisManager, err := relay.NewRedisManager(redisURI, logger)
 		if err != nil {
 			return nil, nil, fmt.Errorf("creating Redis relay manager: %w", err)
 		}
+		// Start background recovery for stuck messages
+		redisManager.StartRecovery(context.Background())
 		relayManager = redisManager
 		logger.Info("relay enabled (Redis mode)", "tokens", len(relayTokens), "uri", sanitizeRedisURI(redisURI))
 	} else {
