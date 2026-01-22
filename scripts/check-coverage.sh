@@ -16,7 +16,7 @@ MODULE_PATH="github.com/tight-line/gatekeeper"
 COVERAGE_FILE="coverage.out"
 
 echo "Running tests with coverage..."
-go test -coverprofile="$COVERAGE_FILE" -covermode=atomic -tags=ci ./...
+go test -race -coverprofile="$COVERAGE_FILE" -covermode=atomic -tags=ci ./...
 echo ""
 
 # Get uncovered lines (count=0)
