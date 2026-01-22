@@ -346,8 +346,13 @@ func (m *RedisManager) Poll(ctx context.Context, token string) (*Webhook, error)
 		}).Result()
 
 		if err == redis.Nil {
-			// Timeout - no messages available
-			return nil, ctx.Err()
+			// Block timed out - no messages available
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			// Block timeout reached but context not yet expired - continue to recheck
+			// coverage:ignore - timing edge case: block times out before context expires (rare)
+			continue
 		}
 		if err != nil {
 			// Check if context was canceled

@@ -1444,13 +1444,14 @@ func TestRedisManager_Poll_BlockTimeoutNearZero(t *testing.T) {
 
 	m.RegisterToken("token1")
 
-	// Create a context with deadline just barely in the future (50ms)
-	// The default block timeout is 30s, so this should be less
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	// Create a context with a short deadline - Poll should respect this and timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// Poll - should use the short deadline and timeout
+	// Poll - should timeout since there are no messages
 	_, err := m.Poll(ctx, "token1")
+
+	// Should get a context deadline exceeded error
 	if err == nil {
 		t.Error("expected timeout error")
 	}
