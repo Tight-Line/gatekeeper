@@ -6,7 +6,7 @@
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Tight-Line_gatekeeper&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Tight-Line_gatekeeper)
 [![Snyk](https://snyk.io/test/github/tight-line/gatekeeper/badge.svg)](https://snyk.io/test/github/tight-line/gatekeeper)
 
-A webhook authentication proxy for enterprise environments.
+A webhook authentication, authorization, and validation proxy for enterprise environments.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ A webhook authentication proxy for enterprise environments.
   - [Overview](#security-overview)
   - [Mitigations](#mitigations)
 - [Alternatives Considered](#alternatives-considered)
-- [Implementation Status](#implementation-status)
+- [Planned Work](#planned-work)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Development](#development)
@@ -347,9 +347,7 @@ Gatekeeper provides built-in verifiers for each supported provider. You specify 
 
 ---
 
-## Implementation Status
-
-See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for current features and planned work.
+## Planned Work
 
 See [docs/PROVIDER_TODO.md](docs/PROVIDER_TODO.md) for the list of webhook providers we plan to support.
 

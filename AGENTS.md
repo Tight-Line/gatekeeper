@@ -4,7 +4,7 @@ This file provides context and instructions for AI coding agents working on gate
 
 ## Project Summary
 
-gatekeeper is a webhook authentication proxy for enterprise environments that cannot expose internal services directly to the internet. It validates incoming webhooks from SaaS providers (Slack, Google, GitHub, Shopify) using provider-specific signature verification, filters by source IP, and forwards authenticated requests to internal backends.
+gatekeeper is a webhook authentication, authorization, and validation proxy for enterprise environments that cannot expose internal services directly to the internet. It validates incoming webhooks from SaaS providers (Slack, Google, GitHub, Shopify) using provider-specific signature verification, filters by source IP, and forwards authenticated requests to internal backends.
 
 ## Build and Test Commands
 
@@ -166,9 +166,7 @@ The `config/` directory contains example and template files. **Deployment-specif
 
 When creating deployment configs, store them locally or in a separate deployment repo. Do not commit them to this repository.
 
-## Current Implementation Status
-
-See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for current status and planned work.
+## Planned Work
 
 See [docs/PROVIDER_TODO.md](docs/PROVIDER_TODO.md) for the list of webhook providers we plan to support.
 
