@@ -657,12 +657,13 @@ func TestNewHandler_BuildVerifiers(t *testing.T) {
 			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
 		},
 		Verifiers: map[string]config.VerifierConfig{
-			"slack":   {Type: "slack", SigningSecret: "secret"},
-			"github":  {Type: "github", Secret: "secret"},
-			"shopify": {Type: "shopify", Secret: "secret"},
-			"apikey":  {Type: "api_key", Header: "X-API-Key", Token: "token"},
-			"hmac":    {Type: "hmac", Header: "X-Sig", Secret: "secret", Hash: "SHA256", Encoding: "hex"},
-			"noop":    {Type: "noop"},
+			"slack":      {Type: "slack", SigningSecret: "secret"},
+			"github":     {Type: "github", Secret: "secret"},
+			"shopify":    {Type: "shopify", Secret: "secret"},
+			"apikey":     {Type: "api_key", Header: "X-API-Key", Token: "token"},
+			"hmac":       {Type: "hmac", Header: "X-Sig", Secret: "secret", Hash: "SHA256", Encoding: "hex"},
+			"json_field": {Type: "json_field", Path: "clientState", Token: "secret"},
+			"noop":       {Type: "noop"},
 		},
 	}
 
@@ -675,8 +676,8 @@ func TestNewHandler_BuildVerifiers(t *testing.T) {
 	}
 
 	// Verify all verifiers were created
-	if len(handler.verifiers) != 6 {
-		t.Errorf("expected 6 verifiers, got %d", len(handler.verifiers))
+	if len(handler.verifiers) != 7 {
+		t.Errorf("expected 7 verifiers, got %d", len(handler.verifiers))
 	}
 }
 

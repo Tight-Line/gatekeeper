@@ -43,7 +43,7 @@ type IPAllowlist struct {
 
 // VerifierConfig defines a webhook signature verifier
 type VerifierConfig struct {
-	Type string `yaml:"type"` // slack, github, shopify, api_key, hmac, noop
+	Type string `yaml:"type"` // slack, github, shopify, api_key, hmac, json_field, noop
 
 	// For slack verifier
 	SigningSecret   string        `yaml:"signing_secret,omitempty"`
@@ -59,6 +59,9 @@ type VerifierConfig struct {
 	// For generic hmac verifier
 	Hash     string `yaml:"hash,omitempty"`     // SHA256, SHA512
 	Encoding string `yaml:"encoding,omitempty"` // hex, base64
+
+	// For json_field verifier
+	Path string `yaml:"path,omitempty"` // dot-notation path to field (e.g., "value.0.clientState")
 }
 
 // ValidatorConfig defines a payload structure validator
@@ -233,6 +236,8 @@ func validateVerifier(name string, v VerifierConfig) error {
 		return validateAPIKeyVerifier(name, v)
 	case "hmac":
 		return validateHMACVerifier(name, v)
+	case "json_field":
+		return validateJSONFieldVerifier(name, v)
 	case "noop":
 		// No validation needed
 	case "":
@@ -267,6 +272,17 @@ func validateHMACVerifier(name string, v VerifierConfig) error {
 	}
 	if v.Encoding == "" {
 		return fmt.Errorf("verifier %q: encoding is required for hmac verifier (hex or base64)", name)
+	}
+	return nil
+}
+
+// validateJSONFieldVerifier validates json_field verifier config
+func validateJSONFieldVerifier(name string, v VerifierConfig) error {
+	if v.Path == "" {
+		return fmt.Errorf("verifier %q: path is required for json_field verifier", name)
+	}
+	if v.Token == "" {
+		return fmt.Errorf("verifier %q: token is required for json_field verifier", name)
 	}
 	return nil
 }

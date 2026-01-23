@@ -108,6 +108,77 @@ Gatekeeper distinguishes between two types of request validation:
 
 Both are optional per route. When both are configured, verification runs first, then validation.
 
+### Verifier Types
+
+**Slack (`type: slack`):**
+```yaml
+verifiers:
+  my-slack:
+    type: slack
+    signing_secret: "${SLACK_SIGNING_SECRET}"
+    max_timestamp_age: 5m  # optional, default 5m
+```
+
+**GitHub (`type: github`):**
+```yaml
+verifiers:
+  my-github:
+    type: github
+    secret: "${GITHUB_WEBHOOK_SECRET}"
+```
+
+**Shopify (`type: shopify`):**
+```yaml
+verifiers:
+  my-shopify:
+    type: shopify
+    secret: "${SHOPIFY_WEBHOOK_SECRET}"
+```
+
+**Generic HMAC (`type: hmac`):**
+```yaml
+verifiers:
+  custom-hmac:
+    type: hmac
+    header: X-Signature  # header containing the signature
+    secret: "${HMAC_SECRET}"
+    hash: SHA256         # SHA256 or SHA512
+    encoding: hex        # hex or base64
+```
+
+**API Key (`type: api_key`):**
+```yaml
+verifiers:
+  google-calendar:
+    type: api_key
+    header: X-Goog-Channel-Token
+    token: "${GOOGLE_CHANNEL_TOKEN}"
+```
+
+**JSON Field (`type: json_field`):**
+
+For providers like Microsoft Graph that embed a verification token in the JSON body rather than a header:
+
+```yaml
+verifiers:
+  ms-graph:
+    type: json_field
+    path: value.0.clientState  # dot-notation path (supports array indices)
+    token: "${MS_GRAPH_CLIENT_STATE}"
+```
+
+Path examples:
+- `clientState` - top-level field
+- `data.clientState` - nested field
+- `value.0.clientState` - first element of array, then field
+
+**Noop (`type: noop`):**
+```yaml
+verifiers:
+  testing:
+    type: noop  # always succeeds, for testing only
+```
+
 ### Validator Configuration
 
 Validators use JSON Schema to define expected payload structure.

@@ -122,6 +122,8 @@ func buildVerifier(vc config.VerifierConfig) (verifier.Verifier, error) {
 		return verifier.NewAPIKeyVerifier(vc.Header, vc.Token), nil
 	case "hmac":
 		return verifier.NewHMACVerifier(vc.Header, vc.Secret, vc.Hash, vc.Encoding)
+	case "json_field":
+		return verifier.NewJSONFieldVerifier(vc.Path, vc.Token), nil
 	case "noop":
 		return verifier.NewNoopVerifier(), nil
 	default:
