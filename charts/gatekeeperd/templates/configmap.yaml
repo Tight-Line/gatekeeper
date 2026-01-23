@@ -52,6 +52,13 @@ data:
         {{- else if eq $verifier.type "json_field" }}
         path: {{ $verifier.path | quote }}
         token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}
+        {{- else if eq $verifier.type "query_param" }}
+        name: {{ $verifier.name | quote }}
+        token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}
+        {{- else if eq $verifier.type "header_query_param" }}
+        header: {{ $verifier.header | quote }}
+        name: {{ $verifier.name | quote }}
+        token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}
         {{- end }}
       {{- end }}
 

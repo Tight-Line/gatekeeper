@@ -243,6 +243,15 @@ verifiers: {}
 #    type: json_field
 #    path: "value.0.clientState.tpVerificationToken"
 #    tokenKey: MS_GRAPH_TP_VERIFICATION_TOKEN
+#  webhook-url-token:
+#    type: query_param
+#    name: token
+#    tokenKey: WEBHOOK_URL_TOKEN
+#  gcal-channel-token:
+#    type: header_query_param
+#    header: "X-Goog-Channel-Token"
+#    name: secret
+#    tokenKey: GCAL_CHANNEL_SECRET
 
 # Proxy routes
 # Each route must have either 'destination' (direct forwarding) or 'relayTokenKey' (relay delivery)

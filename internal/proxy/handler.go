@@ -124,6 +124,10 @@ func buildVerifier(vc config.VerifierConfig) (verifier.Verifier, error) {
 		return verifier.NewHMACVerifier(vc.Header, vc.Secret, vc.Hash, vc.Encoding)
 	case "json_field":
 		return verifier.NewJSONFieldVerifier(vc.Path, vc.Token), nil
+	case "query_param":
+		return verifier.NewQueryParamVerifier(vc.Name, vc.Token), nil
+	case "header_query_param":
+		return verifier.NewHeaderQueryParamVerifier(vc.Header, vc.Name, vc.Token), nil
 	case "noop":
 		return verifier.NewNoopVerifier(), nil
 	default:

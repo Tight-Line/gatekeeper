@@ -835,3 +835,126 @@ func TestValidate_ValidJSONFieldVerifier(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestValidate_QueryParamVerifier_MissingName(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:  "query_param",
+				Token: "secret",
+				// Name is missing
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for query_param verifier without name")
+	}
+}
+
+func TestValidate_QueryParamVerifier_MissingToken(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type: "query_param",
+				Name: "token",
+				// Token is missing
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for query_param verifier without token")
+	}
+}
+
+func TestValidate_ValidQueryParamVerifier(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:  "query_param",
+				Name:  "token",
+				Token: "my-secret",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_HeaderQueryParamVerifier_MissingHeader(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:  "header_query_param",
+				Name:  "secret",
+				Token: "my-secret",
+				// Header is missing
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for header_query_param verifier without header")
+	}
+}
+
+func TestValidate_HeaderQueryParamVerifier_MissingName(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:   "header_query_param",
+				Header: "X-Goog-Channel-Token",
+				Token:  "my-secret",
+				// Name is missing
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for header_query_param verifier without name")
+	}
+}
+
+func TestValidate_HeaderQueryParamVerifier_MissingToken(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:   "header_query_param",
+				Header: "X-Goog-Channel-Token",
+				Name:   "secret",
+				// Token is missing
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for header_query_param verifier without token")
+	}
+}
+
+func TestValidate_ValidHeaderQueryParamVerifier(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:   "header_query_param",
+				Header: "X-Goog-Channel-Token",
+				Name:   "secret",
+				Token:  "my-secret",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
