@@ -136,6 +136,17 @@ ip_allowlists:
     refresh_interval: 24h
 ```
 
+## Interactive Skills
+
+Gatekeeper includes AI skills for interactive configuration (see [agents/](agents/)):
+
+- **Configure Route** ([agents/configure-route.md](agents/configure-route.md)) - Configure a single webhook route
+- **Configure Helm** ([agents/configure-helm.md](agents/configure-helm.md)) - Configure a complete Kubernetes deployment
+
+These are user-facing interactive wizards, not coding agent instructions. In Claude Code, invoke with `/configure-route` or `/configure-helm`.
+
+**Maintenance**: When adding features that affect configuration (new verifier types, new route options, new Helm values), update the relevant skill files in `agents/` before committing. The skills should always reflect the current capabilities.
+
 ## File Locations
 
 - Server entry point: cmd/gatekeeperd/main.go

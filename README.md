@@ -19,6 +19,7 @@ A webhook authentication, authorization, and validation proxy for enterprise env
 - [Security Considerations](#security-considerations)
   - [Overview](#security-overview)
   - [Mitigations](#mitigations)
+- [AI-Assisted Configuration](#ai-assisted-configuration)
 - [Alternatives Considered](#alternatives-considered)
 - [Planned Work](#planned-work)
 - [Installation](#installation)
@@ -302,6 +303,60 @@ Relay mode eliminates inbound firewall rules entirely. The relay client initiate
 - No listening ports exposed to the internet on your internal network
 - Webhooks must pass all configured validations (IP, signature, schema) before the relay client ever sees them
 - The only attack surface is gatekeeperd itself, which performs all validation before queuing
+
+---
+
+## AI-Assisted Configuration
+
+Gatekeeper includes AI skills for interactive configuration. These skills guide you through setup step-by-step, generating complete configuration files with provider-specific instructions.
+
+### Available Skills
+
+| Skill | Description |
+|-------|-------------|
+| **Configure Route** | Configure a single webhook route - walks through provider selection, delivery mode, verifier setup, and generates both server and relay configs |
+| **Configure Helm** | Configure a complete Kubernetes deployment - wraps multiple routes plus ingress/gateway, TLS, secrets, and relay setup |
+
+### Using the Skills
+
+**With Claude Code** (slash commands):
+```
+/configure-route
+/configure-helm
+```
+
+**With any AI assistant** (paste the skill or ask directly):
+```
+I want to configure a webhook for Slack
+Help me deploy gatekeeper to Kubernetes
+```
+
+The skill definitions in [`agents/`](agents/) can be provided to any AI assistant as context for interactive configuration.
+
+### What the Skills Configure
+
+**Configure Route** supports all verifier types:
+- Slack (HMAC-SHA256 with replay protection)
+- GitHub (HMAC-SHA256)
+- Shopify (HMAC-SHA256 base64)
+- Google Calendar (header token)
+- Microsoft Graph (JSON field token)
+- Generic HMAC (configurable algorithm/encoding)
+- API Key, Query Parameter, Header Query Parameter
+
+**Configure Helm** handles:
+- Multiple webhook routes in a single deployment
+- Ingress (nginx, Traefik) or Gateway API configuration
+- TLS with cert-manager or built-in ACME
+- Secrets management (Helm-managed or external)
+- Redis/Valkey for multi-replica relay coordination
+- gatekeeper-relay deployment for private networks
+
+### Skill Documentation
+
+The skill definitions are in the [`agents/`](agents/) directory:
+- [`agents/configure-route.md`](agents/configure-route.md)
+- [`agents/configure-helm.md`](agents/configure-helm.md)
 
 ---
 

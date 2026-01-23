@@ -405,46 +405,66 @@ Use log aggregation tools (Loki, Elasticsearch, CloudWatch) to collect and query
 
 ---
 
-## Interactive Route Configuration (Claude Code)
+## Interactive Configuration (AI Skills)
 
-If you use [Claude Code](https://github.com/anthropics/claude-code), gatekeeper includes an interactive skill to help configure new webhook routes.
+Gatekeeper includes AI skills for interactive configuration. These work with Claude Code (as slash commands), Claude.ai, or any AI assistant that can follow the skill instructions.
 
-### Usage
+### Available Skills
 
-Invoke the skill with:
+| Skill | Claude Code | Description |
+|-------|-------------|-------------|
+| Configure Route | `/configure-route` | Walks through provider selection, delivery mode, verifier setup |
+| Configure Helm | `/configure-helm` | Wraps multiple routes plus ingress/gateway, TLS, secrets, relay |
 
-```
-/configure-route
-```
+### Configure Route
 
-Or simply ask: "I want to configure a webhook for Slack"
+Invoke with `/configure-route` in Claude Code, or ask any AI assistant: "I want to configure a webhook for Slack"
 
-### What It Does
+The skill walks you through:
 
-The skill walks you through configuring a new webhook route step by step:
-
-1. **Provider selection** - Slack, GitHub, Shopify, Google Calendar, or generic HMAC/API key
+1. **Provider selection** - Slack, GitHub, Shopify, Google Calendar, Microsoft Graph, or generic options
 2. **External hostname** - The public DNS name for receiving webhooks
-3. **Delivery mode** - Direct forwarding or relay client
-4. **Internal destination** - Where webhooks should be delivered
+3. **Path** - URL path to match (with segment-aware prefix matching)
+4. **Delivery mode** - Direct forwarding or relay client
+5. **Internal destination** - Where webhooks should be delivered
+6. **Optional settings** - IP allowlist, preserve_host, JSON Schema validation
 
-After gathering this information, it generates:
-
-- Complete `gatekeeperd.yaml` configuration stanza
-- Relay client configuration (if using relay mode)
-- Provider-specific setup instructions (where to find signing secrets, etc.)
-- Environment variable summary
+After gathering this information, it generates complete configuration for gatekeeperd and (if relay mode) gatekeeper-relay, plus provider-specific setup instructions.
 
 ### Supported Providers
 
-| Provider | Verifier Type | Setup Guidance |
-|----------|---------------|----------------|
-| Slack | `slack` | Events API, signing secret location. URL verification handled automatically. |
-| GitHub | `github` | Repository/org webhook setup |
-| Shopify | `shopify` | Admin panel webhook configuration |
-| Google Calendar | `api_key` | Calendar API watch requests |
-| Generic HMAC | `hmac` | Configurable algorithm/encoding |
+| Provider | Verifier Type | Notes |
+|----------|---------------|-------|
+| Slack | `slack` | HMAC-SHA256 with replay protection. URL verification handled automatically. |
+| GitHub | `github` | HMAC-SHA256 |
+| Shopify | `shopify` | HMAC-SHA256 base64 |
+| Google Calendar | `api_key` | X-Goog-Channel-Token header |
+| Microsoft Graph | `json_field` | Token embedded in JSON body |
+| Generic HMAC | `hmac` | Configurable algorithm (SHA256/SHA512) and encoding (hex/base64) |
 | API Key | `api_key` | Simple header token |
+| Query Parameter | `query_param` | Token in URL query string |
+| Header Query Param | `header_query_param` | Key=value pairs encoded in header |
+
+### Configure Helm
+
+Invoke with `/configure-helm` in Claude Code, or ask any AI assistant: "Help me deploy gatekeeper to Kubernetes"
+
+The skill guides you through a complete Helm deployment:
+
+1. **Deployment context** - Namespace, ingress/gateway type, TLS management
+2. **Routes** - Configure multiple routes (runs `/configure-route` for each)
+3. **Secrets** - Helm-managed or external secret management
+4. **Ingress/Gateway** - nginx, Traefik Ingress, Gateway API, or LoadBalancer
+5. **Replicas and Redis** - Multi-replica coordination for relay routes
+6. **Relay deployment** - gatekeeper-relay configuration if needed
+
+Generates complete, ready-to-use values files for both charts plus deployment commands.
+
+### Skill Documentation
+
+The full skill definitions are in [`agents/`](../agents/):
+- [`agents/configure-route.md`](../agents/configure-route.md)
+- [`agents/configure-helm.md`](../agents/configure-helm.md)
 
 ### Example Session
 
@@ -456,8 +476,11 @@ Claude: Which webhook provider do you want to configure?
 - GitHub
 - Shopify
 - Google Calendar
+- Microsoft Graph
 - Generic HMAC
 - API Key
+- Query Parameter Token
+- Header Query Parameter
 
 You: Slack
 
@@ -478,4 +501,7 @@ You: http://internal.example.com:8080/webhooks/slack
 
 Claude: Here's your configuration...
 [generates complete config for both server and relay client]
+
+Claude: Would you like to configure another route, or set up the Helm deployment?
+Use /configure-helm for a complete Kubernetes deployment with ingress and TLS.
 ```
