@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-01-23
+
 ### Added
 - `query_param` verifier type for validating a query parameter in the request URL
 - `header_query_param` verifier type for parsing a header value as query string format and validating a named parameter (e.g., Google's `X-Goog-Channel-Token` with `secret=...` format)

@@ -2,8 +2,8 @@ apiVersion: v2
 name: gatekeeperd
 description: Webhook authentication proxy server for validating and forwarding webhooks
 type: application
-version: 0.2.3
-appVersion: "0.2.3"
+version: 0.2.4
+appVersion: "0.2.4"
 keywords:
   - webhook
   - proxy
