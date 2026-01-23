@@ -43,7 +43,7 @@ type IPAllowlist struct {
 
 // VerifierConfig defines a webhook signature verifier
 type VerifierConfig struct {
-	Type string `yaml:"type"` // slack, github, shopify, api_key, hmac, json_field, noop
+	Type string `yaml:"type"` // slack, github, shopify, api_key, hmac, json_field, query_param, header_query_param, noop
 
 	// For slack verifier
 	SigningSecret   string        `yaml:"signing_secret,omitempty"`
@@ -62,6 +62,9 @@ type VerifierConfig struct {
 
 	// For json_field verifier
 	Path string `yaml:"path,omitempty"` // dot-notation path to field (e.g., "value.0.clientState")
+
+	// For query_param and header_query_param verifiers
+	Name string `yaml:"name,omitempty"` // query parameter name or key name within header
 }
 
 // ValidatorConfig defines a payload structure validator
@@ -238,6 +241,10 @@ func validateVerifier(name string, v VerifierConfig) error {
 		return validateHMACVerifier(name, v)
 	case "json_field":
 		return validateJSONFieldVerifier(name, v)
+	case "query_param":
+		return validateQueryParamVerifier(name, v)
+	case "header_query_param":
+		return validateHeaderQueryParamVerifier(name, v)
 	case "noop":
 		// No validation needed
 	case "":
@@ -283,6 +290,31 @@ func validateJSONFieldVerifier(name string, v VerifierConfig) error {
 	}
 	if v.Token == "" {
 		return fmt.Errorf("verifier %q: token is required for json_field verifier", name)
+	}
+	return nil
+}
+
+// validateQueryParamVerifier validates query_param verifier config
+func validateQueryParamVerifier(name string, v VerifierConfig) error {
+	if v.Name == "" {
+		return fmt.Errorf("verifier %q: name is required for query_param verifier", name)
+	}
+	if v.Token == "" {
+		return fmt.Errorf("verifier %q: token is required for query_param verifier", name)
+	}
+	return nil
+}
+
+// validateHeaderQueryParamVerifier validates header_query_param verifier config
+func validateHeaderQueryParamVerifier(name string, v VerifierConfig) error {
+	if v.Header == "" {
+		return fmt.Errorf("verifier %q: header is required for header_query_param verifier", name)
+	}
+	if v.Name == "" {
+		return fmt.Errorf("verifier %q: name is required for header_query_param verifier", name)
+	}
+	if v.Token == "" {
+		return fmt.Errorf("verifier %q: token is required for header_query_param verifier", name)
 	}
 	return nil
 }
