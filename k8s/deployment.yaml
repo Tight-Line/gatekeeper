@@ -42,14 +42,16 @@ spec:
               mountPath: /var/cache/gatekeeper/certs
           livenessProbe:
             httpGet:
-              path: /health
-              port: metrics
+              path: /healthz
+              port: https
+              scheme: HTTPS
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /health
-              port: metrics
+              path: /healthz
+              port: https
+              scheme: HTTPS
             initialDelaySeconds: 5
             periodSeconds: 10
           resources:

@@ -255,14 +255,20 @@ func startMetricsServer(cfg *config.Config, logger *slog.Logger) {
 
 // buildMainHandler builds the main HTTP handler, combining proxy and relay if needed
 func buildMainHandler(handler http.Handler, relayHandler *relay.Handler) http.Handler {
-	if relayHandler == nil {
-		return handler
+	mux := http.NewServeMux()
+
+	// Health check endpoint for ingress/gateway probes (responds regardless of Host header)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	if relayHandler != nil {
+		// Specific relay protocol endpoints
+		mux.Handle("/relay/poll", relayHandler)
+		mux.Handle("/relay/response", relayHandler)
 	}
 
-	mux := http.NewServeMux()
-	// Specific relay protocol endpoints
-	mux.Handle("/relay/poll", relayHandler)
-	mux.Handle("/relay/response", relayHandler)
 	// Everything else goes to proxy handler (including webhook routes)
 	mux.Handle("/", handler)
 	return mux

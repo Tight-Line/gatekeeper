@@ -75,20 +75,28 @@ spec:
             - name: acme-cache
               mountPath: {{ .Values.tls.cacheDir }}
           {{- end }}
-          {{- if .Values.metrics.enabled }}
           livenessProbe:
             httpGet:
-              path: /health
-              port: metrics
+              path: /healthz
+              {{- if .Values.tls.enabled }}
+              port: https
+              scheme: HTTPS
+              {{- else }}
+              port: http
+              {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /health
-              port: metrics
+              path: /healthz
+              {{- if .Values.tls.enabled }}
+              port: https
+              scheme: HTTPS
+              {{- else }}
+              port: http
+              {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
-          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- if and .Values.tls.enabled .Values.persistence.enabled }}

@@ -94,10 +94,10 @@ func NewHandler(cfg *config.Config, filters *ipfilter.FilterSet, logger *slog.Lo
 		h.validators[name] = v
 	}
 
-	// Build route lookup map
+	// Build route lookup map (hostnames are lowercased for case-insensitive matching per RFC 7230)
 	for i := range cfg.Routes {
 		route := &cfg.Routes[i]
-		key := route.Hostname + ":" + route.Path
+		key := strings.ToLower(route.Hostname) + ":" + route.Path
 		h.routesByHostPath[key] = route
 	}
 
@@ -122,6 +122,8 @@ func buildVerifier(vc config.VerifierConfig) (verifier.Verifier, error) {
 		return verifier.NewAPIKeyVerifier(vc.Header, vc.Token), nil
 	case "hmac":
 		return verifier.NewHMACVerifier(vc.Header, vc.Secret, vc.Hash, vc.Encoding)
+	case "json_field":
+		return verifier.NewJSONFieldVerifier(vc.Path, vc.Token), nil
 	case "noop":
 		return verifier.NewNoopVerifier(), nil
 	default:
@@ -155,7 +157,7 @@ type requestContext struct {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := &requestContext{start: time.Now()}
 
-	ctx.hostname = r.Host
+	ctx.hostname = strings.ToLower(r.Host)
 	if host, _, err := net.SplitHostPort(ctx.hostname); err == nil {
 		ctx.hostname = host
 	}
@@ -467,9 +469,11 @@ func (h *Handler) handleForward(w http.ResponseWriter, r *http.Request, ctx *req
 	)
 }
 
-// findRoute finds a matching route for the hostname and path
+// findRoute finds a matching route for the hostname and path.
+// Hostname matching is case-insensitive per RFC 7230.
+// The hostname parameter should already be lowercased by the caller.
 func (h *Handler) findRoute(hostname, path string) *config.RouteConfig {
-	// Try exact match first
+	// Try exact match first (routesByHostPath keys are already lowercased)
 	if route, ok := h.routesByHostPath[hostname+":"+path]; ok {
 		return route
 	}
@@ -477,7 +481,7 @@ func (h *Handler) findRoute(hostname, path string) *config.RouteConfig {
 	// Try prefix matching (segment-aware: /hooks matches /hooks and /hooks/*, not /hookshot)
 	for i := range h.routes {
 		route := &h.routes[i]
-		if route.Hostname == hostname && strings.HasPrefix(path, route.Path) {
+		if strings.EqualFold(route.Hostname, hostname) && strings.HasPrefix(path, route.Path) {
 			// Ensure prefix ends at segment boundary
 			// Root route "/" matches all paths (since all paths start with /)
 			// Routes ending with "/" already define a segment boundary

@@ -137,6 +137,7 @@ logging:
 #   - google:           All Google IP ranges (includes GCP and Google services)
 #   - google-cloud:     Google Cloud Platform only
 #   - azure-bot:        Azure Bot Service IPs (MS Teams webhooks)
+#   - microsoft-graph:  Microsoft Graph Change Notifications (Outlook Calendar, etc.)
 #   - github:           GitHub webhook source IPs
 #   - salesforce:       Salesforce outbound IPs (static, verify at salesforce.com)
 #   - internal-only:    RFC 1918 private ranges
@@ -177,6 +178,17 @@ ipAllowlists:
     fetchUrl: "https://raw.githubusercontent.com/maciejporebski/azure-ips/refs/heads/main/serviceTags/AzureBotService/ipv4.json"
     fetchJq: ".[]"
     refreshInterval: 24h
+
+  # Microsoft Graph Change Notifications - Outlook Calendar, OneDrive, etc.
+  # Source: https://learn.microsoft.com/en-us/microsoft-365/enterprise/additional-office365-ip-addresses-and-urls
+  # Note: Static list from Microsoft docs; check periodically for updates
+  # Last verified: 2026-01
+  microsoft-graph:
+    cidrs:
+      - "20.20.32.0/19"
+      - "20.190.128.0/18"
+      - "20.231.128.0/19"
+      - "40.126.0.0/18"
 
   # GitHub webhook source IPs
   # Source: https://api.github.com/meta (official)

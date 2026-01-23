@@ -784,3 +784,54 @@ func TestValidate_RouteWithValidator(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestValidate_JSONFieldVerifier_MissingPath(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:  "json_field",
+				Token: "secret",
+				// Path is missing
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for json_field verifier without path")
+	}
+}
+
+func TestValidate_JSONFieldVerifier_MissingToken(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type: "json_field",
+				Path: "value.0.clientState",
+				// Token is missing
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for json_field verifier without token")
+	}
+}
+
+func TestValidate_ValidJSONFieldVerifier(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:  "json_field",
+				Path:  "value.0.clientState",
+				Token: "my-secret-state",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}

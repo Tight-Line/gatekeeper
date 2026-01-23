@@ -108,6 +108,80 @@ Gatekeeper distinguishes between two types of request validation:
 
 Both are optional per route. When both are configured, verification runs first, then validation.
 
+### Verifier Types
+
+**Slack (`type: slack`):**
+```yaml
+verifiers:
+  my-slack:
+    type: slack
+    signing_secret: "${SLACK_SIGNING_SECRET}"
+    max_timestamp_age: 5m  # optional, default 5m
+```
+
+**GitHub (`type: github`):**
+```yaml
+verifiers:
+  my-github:
+    type: github
+    secret: "${GITHUB_WEBHOOK_SECRET}"
+```
+
+**Shopify (`type: shopify`):**
+```yaml
+verifiers:
+  my-shopify:
+    type: shopify
+    secret: "${SHOPIFY_WEBHOOK_SECRET}"
+```
+
+**Generic HMAC (`type: hmac`):**
+```yaml
+verifiers:
+  custom-hmac:
+    type: hmac
+    header: X-Signature  # header containing the signature
+    secret: "${HMAC_SECRET}"
+    hash: SHA256         # SHA256 or SHA512
+    encoding: hex        # hex or base64
+```
+
+**API Key (`type: api_key`):**
+```yaml
+verifiers:
+  google-calendar:
+    type: api_key
+    header: X-Goog-Channel-Token
+    token: "${GOOGLE_CHANNEL_TOKEN}"
+```
+
+**JSON Field (`type: json_field`):**
+
+For providers like Microsoft Graph that embed a verification token in the JSON body rather than a header:
+
+```yaml
+verifiers:
+  ms-graph:
+    type: json_field
+    path: value.0.clientState.secret  # dot-notation path
+    token: "${MS_GRAPH_CLIENT_STATE}"
+```
+
+Path examples:
+- `clientState` - top-level field
+- `data.clientState` - nested field
+- `value.0.clientState` - first element of array, then field
+- `value.0.clientState.secret` - if `clientState` is a JSON string, it's auto-parsed
+
+The verifier auto-parses JSON strings when needed. For example, if `clientState` contains `{"secret":"abc","routing":"data"}`, the path `value.0.clientState.secret` extracts `"abc"`.
+
+**Noop (`type: noop`):**
+```yaml
+verifiers:
+  testing:
+    type: noop  # always succeeds, for testing only
+```
+
 ### Validator Configuration
 
 Validators use JSON Schema to define expected payload structure.
@@ -219,13 +293,29 @@ export GATEKEEPERD_CONFIG="$(cat config.yaml)"
 
 ### Endpoints
 
-| Endpoint | Port | Description |
-|----------|------|-------------|
-| `/*` | 8080 (or -listen) | Webhook routes (configured paths) |
-| `/relay/poll` | 8080 | Relay client polling endpoint |
-| `/relay/response` | 8080 | Relay client response endpoint |
-| `/metrics` | 9090 (configurable) | Prometheus metrics |
-| `/health` | 9090 (configurable) | Health check (returns 200 OK) |
+**Main HTTP port (8080 or -listen):**
+
+| Endpoint | Description |
+|----------|-------------|
+| `/*` | Webhook routes (configured paths) |
+| `/healthz` | Health check for ingress/gateway probes (returns 200 OK, hostname-agnostic) |
+| `/relay/poll` | Relay client polling endpoint |
+| `/relay/response` | Relay client response endpoint |
+
+**Metrics port (9090, configurable via `global.metrics_port`):**
+
+| Endpoint | Description |
+|----------|-------------|
+| `/metrics` | Prometheus metrics |
+| `/health` | Health check (returns 200 OK) |
+
+**Health Check Configuration:**
+
+When deploying behind an ingress controller or gateway, configure health probes to use `/healthz` on the main HTTP port. This endpoint responds with 200 OK regardless of the Host header, making it suitable for load balancer health checks.
+
+For Kubernetes deployments:
+- **Liveness/readiness probes** use `/health` on the metrics port (configured automatically by the Helm chart)
+- **Ingress/gateway backend health checks** should use `/healthz` on the main HTTP port
 
 ---
 

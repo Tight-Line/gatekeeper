@@ -106,6 +106,7 @@ In relay mode, the relay client inside the private network initiates an outbound
 | shopify | Shopify | HMAC-SHA256 of body, base64 encoded |
 | hmac | Generic | Configurable HMAC (SHA256/SHA512, hex/base64) |
 | api_key | Google Calendar | Header token comparison |
+| json_field | Microsoft Graph | Token embedded in JSON body at configurable path |
 | noop | Testing | Always succeeds |
 
 ### Configuration Loading
