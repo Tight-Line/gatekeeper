@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `json_field` verifier type for providers that embed verification tokens in the JSON body (e.g., Microsoft Graph `clientState`)
+- `json_field` verifier type for providers that embed verification tokens in the JSON body (e.g., Microsoft Graph `clientState`). Supports auto-parsing nested JSON strings for paths like `value.0.clientState.secret`
 - `microsoft-graph` predefined IP allowlist for Microsoft Graph Change Notifications (Outlook Calendar, OneDrive, etc.)
 - `/healthz` health check endpoint on the main HTTP port for ingress/gateway probes
 

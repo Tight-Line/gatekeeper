@@ -163,7 +163,7 @@ For providers like Microsoft Graph that embed a verification token in the JSON b
 verifiers:
   ms-graph:
     type: json_field
-    path: value.0.clientState  # dot-notation path (supports array indices)
+    path: value.0.clientState.secret  # dot-notation path
     token: "${MS_GRAPH_CLIENT_STATE}"
 ```
 
@@ -171,6 +171,9 @@ Path examples:
 - `clientState` - top-level field
 - `data.clientState` - nested field
 - `value.0.clientState` - first element of array, then field
+- `value.0.clientState.secret` - if `clientState` is a JSON string, it's auto-parsed
+
+The verifier auto-parses JSON strings when needed. For example, if `clientState` contains `{"secret":"abc","routing":"data"}`, the path `value.0.clientState.secret` extracts `"abc"`.
 
 **Noop (`type: noop`):**
 ```yaml
