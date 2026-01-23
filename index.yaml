@@ -2,6 +2,25 @@ apiVersion: v1
 entries:
   gatekeeper-relay:
   - apiVersion: v2
+    appVersion: 0.2.4
+    created: "2026-01-23T07:03:02.597416211Z"
+    description: Relay client for gatekeeper that enables webhook delivery to private
+      networks
+    digest: 1cf69ab6c133f8d0cf5bf7ed85cd386936e4f8a576511d4b8699c9490d1e41a2
+    keywords:
+    - webhook
+    - relay
+    - proxy
+    - private-network
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeper-relay
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.2.4/gatekeeper-relay-0.2.4.tgz
+    version: 0.2.4
+  - apiVersion: v2
     appVersion: 0.2.3
     created: "2026-01-23T06:10:14.148744845Z"
     description: Relay client for gatekeeper that enables webhook delivery to private
@@ -249,6 +268,32 @@ entries:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.1.0/gatekeeper-relay-0.1.0.tgz
     version: 0.1.0
   gatekeeperd:
+  - apiVersion: v2
+    appVersion: 0.2.4
+    created: "2026-01-23T07:03:02.84534344Z"
+    dependencies:
+    - condition: redis.enabled,redis.bundled
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: ~0.9
+    description: Webhook authentication proxy server for validating and forwarding
+      webhooks
+    digest: 4bc471c8915804b6490b69017269447a713d5a39b67e44558f1d4404ac763d00
+    keywords:
+    - webhook
+    - proxy
+    - authentication
+    - slack
+    - github
+    - relay
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeperd
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.2.4/gatekeeperd-0.2.4.tgz
+    version: 0.2.4
   - apiVersion: v2
     appVersion: 0.2.3
     created: "2026-01-23T06:10:14.742563853Z"
@@ -537,4 +582,4 @@ entries:
     urls:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.1.0/gatekeeperd-0.1.0.tgz
     version: 0.1.0
-generated: "2026-01-23T06:10:14.742772803Z"
+generated: "2026-01-23T07:03:02.845527165Z"
