@@ -158,22 +158,36 @@ func TestServer_Shutdown_WithRunningServers(t *testing.T) {
 
 	s := New(cfg)
 
+	// Use channels to signal when servers are ready
+	httpReady := make(chan struct{})
+	httpsReady := make(chan struct{})
+
 	// Start the HTTP server on a real listener
 	httpListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create http listener: %v", err)
 	}
-	go func() { _ = s.httpServer.Serve(httpListener) }()
+	go func() {
+		close(httpReady)
+		_ = s.httpServer.Serve(httpListener)
+	}()
 
 	// Start the HTTPS server on a real listener
 	httpsListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create https listener: %v", err)
 	}
-	go func() { _ = s.httpsServer.ServeTLS(httpsListener, "", "") }()
+	go func() {
+		close(httpsReady)
+		_ = s.httpsServer.ServeTLS(httpsListener, "", "")
+	}()
 
-	// Give servers time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for servers to start accepting connections
+	<-httpReady
+	<-httpsReady
+
+	// Small delay to ensure Serve loops have started
+	time.Sleep(10 * time.Millisecond)
 
 	// Shutdown with a valid context should succeed
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -209,13 +223,20 @@ func TestServer_Shutdown_ErrorPaths(t *testing.T) {
 		},
 	}
 
+	// Use channels to signal when servers are ready
+	httpReady := make(chan struct{})
+	httpsReady := make(chan struct{})
+
 	// Start the HTTP server on a real listener
 	httpListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create http listener: %v", err)
 	}
 	httpAddr := httpListener.Addr().String()
-	go func() { _ = s.httpServer.Serve(httpListener) }()
+	go func() {
+		close(httpReady)
+		_ = s.httpServer.Serve(httpListener)
+	}()
 
 	// Start the HTTPS server on a real listener
 	httpsListener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -223,11 +244,26 @@ func TestServer_Shutdown_ErrorPaths(t *testing.T) {
 		t.Fatalf("failed to create https listener: %v", err)
 	}
 	httpsAddr := httpsListener.Addr().String()
-	go func() { _ = s.httpsServer.Serve(httpsListener) }()
+	go func() {
+		close(httpsReady)
+		_ = s.httpsServer.Serve(httpsListener)
+	}()
+
+	// Wait for servers to be ready
+	<-httpReady
+	<-httpsReady
 
 	// Make blocking requests to both servers
-	go func() { _, _ = http.Get("http://" + httpAddr + "/block") }()
-	go func() { _, _ = http.Get("http://" + httpsAddr + "/block") }()
+	var requestsWg sync.WaitGroup
+	requestsWg.Add(2)
+	go func() {
+		defer requestsWg.Done()
+		_, _ = http.Get("http://" + httpAddr + "/block")
+	}()
+	go func() {
+		defer requestsWg.Done()
+		_, _ = http.Get("http://" + httpsAddr + "/block")
+	}()
 
 	// Wait for handlers to start (at least one)
 	select {
@@ -243,8 +279,9 @@ func TestServer_Shutdown_ErrorPaths(t *testing.T) {
 
 	err = s.Shutdown(ctx)
 
-	// Clean up: unblock the handlers
+	// Clean up: unblock the handlers and wait for requests to complete
 	close(blockCh)
+	requestsWg.Wait()
 
 	if err != nil {
 		t.Logf("Got expected shutdown error: %v", err)
