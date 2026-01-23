@@ -33,19 +33,16 @@ func (v *JSONFieldVerifier) Verify(r *http.Request, body []byte) error {
 		return ErrTokenMismatch
 	}
 
-	// Parse JSON into generic structure
-	var data any
-	if err := json.Unmarshal(body, &data); err != nil {
+	data, err := parseJSONBody(body)
+	if err != nil {
 		return fmt.Errorf("%w: invalid JSON", ErrTokenMismatch)
 	}
 
-	// Extract value at path
 	value, err := extractJSONPath(data, v.path)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrTokenMismatch, err)
 	}
 
-	// Compare as string
 	strValue, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("%w: field is not a string", ErrTokenMismatch)
@@ -56,6 +53,15 @@ func (v *JSONFieldVerifier) Verify(r *http.Request, body []byte) error {
 	}
 
 	return nil
+}
+
+// parseJSONBody parses a JSON body into a generic structure.
+func parseJSONBody(body []byte) (any, error) {
+	var data any
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // Type returns the verifier type identifier.
@@ -87,32 +93,36 @@ func extractJSONPath(data any, path string) (any, error) {
 			return nil, fmt.Errorf("path %q not found: nil value", path)
 		}
 
-		navigated, err := navigatePart(current, part, path)
-		if err == nil {
-			current = navigated
-			continue
-		}
-
-		// Navigation failed - if current is a JSON string, try parsing it
-		str, ok := current.(string)
-		if !ok {
-			return nil, err
-		}
-
-		parsed, parseErr := tryParseJSONString(str)
-		if parseErr != nil {
-			return nil, err // Return original navigation error
-		}
-
-		// Try navigating the parsed JSON
-		navigated, err = navigatePart(parsed, part, path)
+		var err error
+		current, err = navigateOrParse(current, part, path)
 		if err != nil {
 			return nil, err
 		}
-		current = navigated
 	}
 
 	return current, nil
+}
+
+// navigateOrParse attempts to navigate a path segment, falling back to parsing
+// the current value as JSON if it's a string that contains navigable JSON.
+func navigateOrParse(current any, part, fullPath string) (any, error) {
+	navigated, err := navigatePart(current, part, fullPath)
+	if err == nil {
+		return navigated, nil
+	}
+
+	// Navigation failed - if current is a JSON string, try parsing it
+	str, ok := current.(string)
+	if !ok {
+		return nil, err
+	}
+
+	parsed, parseErr := tryParseJSONString(str)
+	if parseErr != nil {
+		return nil, err // Return original navigation error
+	}
+
+	return navigatePart(parsed, part, fullPath)
 }
 
 // navigatePart attempts to navigate one path segment on the current value.
