@@ -49,6 +49,9 @@ data:
         secret: ${{ "{" }}{{ $verifier.secretKey }}{{ "}" }}
         hash: {{ $verifier.hash | quote }}
         encoding: {{ $verifier.encoding | quote }}
+        {{- else if eq $verifier.type "json_field" }}
+        path: {{ $verifier.path | quote }}
+        token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}
         {{- end }}
       {{- end }}
 

@@ -239,6 +239,10 @@ verifiers: {}
 #  martindale-github:
 #    type: github
 #    secretKey: MARTINDALE_GITHUB_WEBHOOK_SECRET
+#  outlook-graph:
+#    type: json_field
+#    path: "value.0.clientState.tpVerificationToken"
+#    tokenKey: MS_GRAPH_TP_VERIFICATION_TOKEN
 
 # Proxy routes
 # Each route must have either 'destination' (direct forwarding) or 'relayTokenKey' (relay delivery)
