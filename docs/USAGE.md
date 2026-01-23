@@ -219,13 +219,29 @@ export GATEKEEPERD_CONFIG="$(cat config.yaml)"
 
 ### Endpoints
 
-| Endpoint | Port | Description |
-|----------|------|-------------|
-| `/*` | 8080 (or -listen) | Webhook routes (configured paths) |
-| `/relay/poll` | 8080 | Relay client polling endpoint |
-| `/relay/response` | 8080 | Relay client response endpoint |
-| `/metrics` | 9090 (configurable) | Prometheus metrics |
-| `/health` | 9090 (configurable) | Health check (returns 200 OK) |
+**Main HTTP port (8080 or -listen):**
+
+| Endpoint | Description |
+|----------|-------------|
+| `/*` | Webhook routes (configured paths) |
+| `/healthz` | Health check for ingress/gateway probes (returns 200 OK, hostname-agnostic) |
+| `/relay/poll` | Relay client polling endpoint |
+| `/relay/response` | Relay client response endpoint |
+
+**Metrics port (9090, configurable via `global.metrics_port`):**
+
+| Endpoint | Description |
+|----------|-------------|
+| `/metrics` | Prometheus metrics |
+| `/health` | Health check (returns 200 OK) |
+
+**Health Check Configuration:**
+
+When deploying behind an ingress controller or gateway, configure health probes to use `/healthz` on the main HTTP port. This endpoint responds with 200 OK regardless of the Host header, making it suitable for load balancer health checks.
+
+For Kubernetes deployments:
+- **Liveness/readiness probes** use `/health` on the metrics port (configured automatically by the Helm chart)
+- **Ingress/gateway backend health checks** should use `/healthz` on the main HTTP port
 
 ---
 
