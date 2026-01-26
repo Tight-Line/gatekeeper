@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `gitlab` verifier type for GitLab webhook authentication via `X-Gitlab-Token` header
+- `gitlab` predefined IP allowlist for GitLab.com webhook source IPs (`34.74.90.64/28`, `34.74.226.0/24`)
+
 ## [0.2.6] - 2026-01-27
 ### Added
 - Microsoft Graph subscription validation handling: automatically responds to `validationToken` query parameter on `json_field` verifier routes, enabling webhook setup without backend involvement (similar to Slack URL verification)
