@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-01-27
+
 ### Added
 - Debug payload logging for troubleshooting: dumps request/response bodies to stdout when enabled via CLI flag (`-debug-payloads`), environment variable (`GATEKEEPERD_DEBUG_PAYLOADS=true` or `GATEKEEPER_RELAY_DEBUG_PAYLOADS=true`), or Helm values (`debug.payloads: true`)
 
