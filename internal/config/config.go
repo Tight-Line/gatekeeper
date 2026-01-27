@@ -11,22 +11,20 @@ import (
 
 // Config is the root configuration structure
 type Config struct {
-	Global       GlobalConfig                 `yaml:"global"`
-	IPAllowlists map[string]IPAllowlist       `yaml:"ip_allowlists"`
-	Verifiers    map[string]VerifierConfig    `yaml:"verifiers"`
-	Validators   map[string]ValidatorConfig   `yaml:"validators"`
-	RateLimiters map[string]RateLimiterConfig `yaml:"rate_limiters"`
-	Routes       []RouteConfig                `yaml:"routes"`
+	Global       GlobalConfig               `yaml:"global"`
+	IPAllowlists map[string]IPAllowlist     `yaml:"ip_allowlists"`
+	Verifiers    map[string]VerifierConfig  `yaml:"verifiers"`
+	Validators   map[string]ValidatorConfig `yaml:"validators"`
+	Routes       []RouteConfig              `yaml:"routes"`
 }
 
 // GlobalConfig contains global settings
 type GlobalConfig struct {
-	ACMEEmail          string `yaml:"acme_email"`
-	ACMECacheDir       string `yaml:"acme_cache_dir"`
-	MetricsPort        int    `yaml:"metrics_port"`
-	LogLevel           string `yaml:"log_level"`
-	MaxBodySize        int64  `yaml:"max_body_size"`        // Maximum request body size in bytes (default: 10MB)
-	DefaultRateLimiter string `yaml:"default_rate_limiter"` // Optional default rate limiter for all routes
+	ACMEEmail    string `yaml:"acme_email"`
+	ACMECacheDir string `yaml:"acme_cache_dir"`
+	MetricsPort  int    `yaml:"metrics_port"`
+	LogLevel     string `yaml:"log_level"`
+	MaxBodySize  int64  `yaml:"max_body_size"` // Maximum request body size in bytes (default: 10MB)
 }
 
 // DefaultMaxBodySize is the default maximum request body size (10MB)
@@ -41,15 +39,6 @@ type IPAllowlist struct {
 	FetchURL        string        `yaml:"fetch_url,omitempty"`
 	FetchJQ         string        `yaml:"fetch_jq,omitempty"` // jq expression to extract CIDRs from JSON
 	RefreshInterval time.Duration `yaml:"refresh_interval,omitempty"`
-}
-
-// RateLimiterConfig defines a named rate limiter
-type RateLimiterConfig struct {
-	TotalRPS        float64       `yaml:"total_rps"`        // Total requests per second across all IPs
-	PerIPRPS        float64       `yaml:"per_ip_rps"`       // Requests per second per client IP (0 = disabled)
-	Burst           int           `yaml:"burst"`            // Burst allowance for spike handling
-	CleanupInterval time.Duration `yaml:"cleanup_interval"` // How often to scan for stale per-IP entries (default: 5m)
-	IdleTimeout     time.Duration `yaml:"idle_timeout"`     // Remove per-IP limiter after idle time (default: 10m)
 }
 
 // VerifierConfig defines a webhook signature verifier
@@ -94,7 +83,6 @@ type RouteConfig struct {
 	IPAllowlist  string `yaml:"ip_allowlist"`
 	Verifier     string `yaml:"verifier"`
 	Validator    string `yaml:"validator,omitempty"`     // Optional payload structure validator
-	RateLimiter  string `yaml:"rate_limiter,omitempty"`  // Optional rate limiter (falls back to global default)
 	Destination  string `yaml:"destination,omitempty"`   // Direct delivery URL
 	RelayToken   string `yaml:"relay_token,omitempty"`   // Relay delivery token (mutually exclusive with destination)
 	PreserveHost bool   `yaml:"preserve_host,omitempty"` // Pass original Host header to destination (default: false)
@@ -181,9 +169,6 @@ func (c *Config) Validate() error {
 	if err := c.validateValidators(); err != nil {
 		return err
 	}
-	if err := c.validateRateLimiters(); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -224,11 +209,6 @@ func (c *Config) validateRoute(i int, route RouteConfig) error {
 	if route.Validator != "" {
 		if _, ok := c.Validators[route.Validator]; !ok {
 			return fmt.Errorf("route %d: validator %q not found", i, route.Validator)
-		}
-	}
-	if route.RateLimiter != "" {
-		if _, ok := c.RateLimiters[route.RateLimiter]; !ok {
-			return fmt.Errorf("route %d: rate_limiter %q not found", i, route.RateLimiter)
 		}
 	}
 	return nil
@@ -373,38 +353,6 @@ func validateValidator(name string, v ValidatorConfig) error {
 		return fmt.Errorf("validator %q: type is required", name)
 	default:
 		return fmt.Errorf("validator %q: unknown type %q", name, v.Type)
-	}
-	return nil
-}
-
-// validateRateLimiters checks that all rate limiter configs are valid
-func (c *Config) validateRateLimiters() error {
-	// Validate global default rate limiter reference
-	if c.Global.DefaultRateLimiter != "" {
-		if _, ok := c.RateLimiters[c.Global.DefaultRateLimiter]; !ok {
-			return fmt.Errorf("global: default_rate_limiter %q not found", c.Global.DefaultRateLimiter)
-		}
-	}
-
-	// Validate each rate limiter config
-	for name, rl := range c.RateLimiters {
-		if err := validateRateLimiter(name, rl); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateRateLimiter validates a single rate limiter configuration
-func validateRateLimiter(name string, rl RateLimiterConfig) error {
-	if rl.TotalRPS <= 0 {
-		return fmt.Errorf("rate_limiter %q: total_rps must be positive", name)
-	}
-	if rl.PerIPRPS < 0 {
-		return fmt.Errorf("rate_limiter %q: per_ip_rps cannot be negative", name)
-	}
-	if rl.Burst <= 0 {
-		return fmt.Errorf("rate_limiter %q: burst must be positive", name)
 	}
 	return nil
 }

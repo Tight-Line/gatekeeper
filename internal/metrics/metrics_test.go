@@ -105,9 +105,3 @@ func TestRecordRelayClientsConnected(t *testing.T) {
 	RecordRelayClientsConnected("token1", 2)
 	RecordRelayClientsConnected("token2", 1)
 }
-
-func TestRecordRateLimited(t *testing.T) {
-	t.Helper()
-	RecordRateLimited("/webhook", "default", "total")
-	RecordRateLimited("/webhook", "default", "per_ip")
-}

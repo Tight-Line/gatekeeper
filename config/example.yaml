@@ -6,7 +6,6 @@ global:
   acme_cache_dir: "/var/cache/gatekeeper/certs"
   metrics_port: 9090
   log_level: info
-  # default_rate_limiter: default  # Optional: apply this limiter to all routes by default
 
 # Named IP allowlists (CIDRs)
 # Each list can be static or dynamically fetched
@@ -69,23 +68,6 @@ verifiers:
   none:
     type: noop
 
-# Rate limiters - define named rate limiters that can be applied to routes
-# Each limiter uses a token bucket algorithm with total and per-IP limits
-rate_limiters:
-  # Default rate limiter with reasonable limits
-  default:
-    total_rps: 100       # Total requests per second across all IPs
-    per_ip_rps: 10       # Requests per second per client IP (0 = disabled)
-    burst: 20            # Spike allowance (token bucket capacity)
-    cleanup_interval: 5m # How often to scan for stale per-IP entries (default: 5m)
-    idle_timeout: 10m    # Remove per-IP limiter after idle time (default: 10m)
-
-  # Strict rate limiter for high-risk endpoints
-  strict:
-    total_rps: 10
-    per_ip_rps: 2
-    burst: 5
-
 # Proxy routes - each hostname is explicitly enumerated
 # ACME certs are obtained automatically for each hostname when using -tls flag
 routes:
@@ -94,7 +76,6 @@ routes:
     path: /events
     ip_allowlist: aws
     verifier: avvo-slack
-    rate_limiter: default  # Optional: apply rate limiting to this route
     destination: http://10.1.1.50:8080/webhooks/slack
 
   # Avvo Google Calendar

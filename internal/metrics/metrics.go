@@ -139,15 +139,6 @@ var (
 		},
 		[]string{"token"},
 	)
-
-	// RateLimitedTotal counts requests denied by rate limiting
-	RateLimitedTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "gatekeeper_rate_limited_total",
-			Help: "Total number of requests denied by rate limiting",
-		},
-		[]string{"route", "limiter", "reason"},
-	)
 )
 
 // Handler returns the Prometheus metrics HTTP handler
@@ -215,9 +206,4 @@ func RecordRelayWebhooksPending(token string, count int) {
 // RecordRelayClientsConnected updates the connected clients gauge
 func RecordRelayClientsConnected(token string, count int) {
 	RelayClientsConnected.WithLabelValues(token).Set(float64(count))
-}
-
-// RecordRateLimited records a request denied by rate limiting
-func RecordRateLimited(route, limiter, reason string) {
-	RateLimitedTotal.WithLabelValues(route, limiter, reason).Inc()
 }

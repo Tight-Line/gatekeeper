@@ -20,7 +20,6 @@ import (
 	gkhttputil "github.com/tight-line/gatekeeper/internal/httputil"
 	"github.com/tight-line/gatekeeper/internal/ipfilter"
 	"github.com/tight-line/gatekeeper/internal/metrics"
-	"github.com/tight-line/gatekeeper/internal/ratelimit"
 	"github.com/tight-line/gatekeeper/internal/relay"
 	"github.com/tight-line/gatekeeper/internal/validator"
 	"github.com/tight-line/gatekeeper/internal/verifier"
@@ -52,8 +51,6 @@ type Handler struct {
 	verifierTypes      map[string]string // verifier name -> type (e.g., "slack", "github")
 	validators         map[string]validator.Validator
 	filters            *ipfilter.FilterSet
-	rateLimiters       *ratelimit.Set
-	defaultRateLimiter string
 	relay              relay.Manager
 	logger             *slog.Logger
 	trustXForwardedFor bool
@@ -116,12 +113,6 @@ func NewHandler(cfg *config.Config, filters *ipfilter.FilterSet, logger *slog.Lo
 // SetRelayManager sets the relay manager for handling relay delivery
 func (h *Handler) SetRelayManager(rm relay.Manager) {
 	h.relay = rm
-}
-
-// SetRateLimiters sets the rate limiters and default limiter for handling rate limiting
-func (h *Handler) SetRateLimiters(limiters *ratelimit.Set, defaultLimiter string) {
-	h.rateLimiters = limiters
-	h.defaultRateLimiter = defaultLimiter
 }
 
 // buildVerifier creates a verifier from config
@@ -187,10 +178,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.checkRateLimit(w, r, ctx) {
-		return
-	}
-
 	if !h.checkIPAllowlist(w, r, ctx) {
 		return
 	}
@@ -241,41 +228,6 @@ func (h *Handler) handleNotFound(w http.ResponseWriter, r *http.Request, ctx *re
 	)
 	metrics.RecordRequest("unknown", "unknown", "404", time.Since(ctx.start).Seconds())
 	http.Error(w, "Not Found", http.StatusNotFound)
-}
-
-func (h *Handler) checkRateLimit(w http.ResponseWriter, r *http.Request, ctx *requestContext) bool {
-	if h.rateLimiters == nil {
-		return true
-	}
-
-	// Determine which limiter to use: route-specific or global default
-	limiterName := ctx.route.RateLimiter
-	if limiterName == "" {
-		limiterName = h.defaultRateLimiter
-	}
-	if limiterName == "" {
-		return true
-	}
-
-	clientIP := h.getClientIP(r)
-	allowed, reason := h.rateLimiters.Allow(limiterName, clientIP)
-	if allowed {
-		return true
-	}
-
-	h.logger.Warn("rate limited",
-		"hostname", ctx.hostname,
-		"path", r.URL.Path,
-		"client_ip", clientIP,
-		"limiter", limiterName,
-		"reason", reason,
-	)
-	metrics.RecordRateLimited(ctx.route.Path, limiterName, reason)
-	metrics.RecordRequest(ctx.hostname, ctx.route.Path, "429", time.Since(ctx.start).Seconds())
-
-	w.Header().Set("Retry-After", "1")
-	http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
-	return false
 }
 
 func (h *Handler) checkIPAllowlist(w http.ResponseWriter, r *http.Request, ctx *requestContext) bool {
