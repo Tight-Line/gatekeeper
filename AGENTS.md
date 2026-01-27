@@ -47,12 +47,13 @@ See [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) for:
 
 1. TLS termination (autocert or ingress)
 2. Route lookup by hostname and path
-3. IP validation against configured allowlist
-4. Signature verification using provider-specific algorithm
-5. Either:
+3. Rate limiting (if configured) - returns 429 with Retry-After header if exceeded
+4. IP validation against configured allowlist
+5. Signature verification using provider-specific algorithm
+6. Either:
    - Forward to destination (transparent proxy), or
    - Deliver via relay to waiting relay client
-6. Log result with minimal information (IP, path, success/failure)
+7. Log result with minimal information (IP, path, success/failure)
 
 ### Delivery Modes
 
@@ -109,6 +110,31 @@ In relay mode, the relay client inside the private network initiates an outbound
 | json_field | Microsoft Graph | Token embedded in JSON body at configurable path |
 | noop | Testing | Always succeeds |
 
+### Rate Limiting
+
+Rate limiting protects against abuse using a token bucket algorithm. Configure named limiters and reference them from routes or set a global default.
+
+```yaml
+rate_limiters:
+  default:
+    total_rps: 100       # Total requests per second across all IPs
+    per_ip_rps: 10       # Per client IP (0 = disabled)
+    burst: 20            # Spike allowance
+    cleanup_interval: 5m # Stale entry cleanup interval (default: 5m)
+    idle_timeout: 10m    # Remove idle per-IP entries after (default: 10m)
+
+global:
+  default_rate_limiter: default  # Apply to all routes without explicit limiter
+
+routes:
+  - hostname: example.com
+    path: /webhook
+    rate_limiter: default  # Override or specify per-route
+    destination: http://backend:8080
+```
+
+When rate limited, returns HTTP 429 with `Retry-After: 1` header. Metrics: `gatekeeper_rate_limited_total{route,limiter,reason}` where reason is `total` or `per_ip`.
+
 ### Configuration Loading
 
 Configuration can be loaded from file or from environment variables:
@@ -155,6 +181,7 @@ These are user-facing interactive wizards, not coding agent instructions. In Cla
 - Relay client config: internal/relayclient/config.go
 - Verifier interface: internal/verifier/verifier.go
 - HTTP handler: internal/proxy/handler.go
+- Rate limiter: internal/ratelimit/limiter.go, internal/ratelimit/set.go
 - Relay manager: internal/relay/manager.go
 - Redis relay manager: internal/relay/redis_manager.go
 - Relay handler: internal/relay/handler.go

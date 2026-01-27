@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Rate limiting support with token bucket algorithm: configure global and per-route rate limiters with total and per-IP limits, burst allowance, and automatic cleanup of stale entries. Returns HTTP 429 with Retry-After header when exceeded. New metric: `gatekeeper_rate_limited_total{route,limiter,reason}`
+
 ## [0.2.6] - 2026-01-27
 ### Added
 - Microsoft Graph subscription validation handling: automatically responds to `validationToken` query parameter on `json_field` verifier routes, enabling webhook setup without backend involvement (similar to Slack URL verification)
