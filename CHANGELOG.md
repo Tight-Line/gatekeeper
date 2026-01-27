@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Debug payload logging for troubleshooting: dumps request/response bodies to stdout when enabled via CLI flag (`-debug-payloads`), environment variable (`GATEKEEPERD_DEBUG_PAYLOADS=true` or `GATEKEEPER_RELAY_DEBUG_PAYLOADS=true`), or Helm values (`debug.payloads: true`)
+- Microsoft Graph subscription validation handling: automatically responds to `validationToken` query parameter on `json_field` verifier routes, enabling webhook setup without backend involvement (similar to Slack URL verification)
 
 ## [0.2.4] - 2026-01-23
 

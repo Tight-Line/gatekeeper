@@ -2623,3 +2623,203 @@ func TestHandler_DebugPayloads_Relay(t *testing.T) {
 		t.Error("expected 'debug: outgoing response' in logs")
 	}
 }
+
+func TestHandler_MicrosoftGraphValidation(t *testing.T) {
+	// Backend should NOT be called for validation requests
+	backendCalled := false
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		backendCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/graph-webhook",
+				Verifier:    "ms-graph",
+				Destination: backend.URL,
+			},
+			{
+				Hostname:    "test.com",
+				Path:        "/slack-webhook",
+				Verifier:    "slack",
+				Destination: backend.URL,
+			},
+			{
+				Hostname:    "test.com",
+				Path:        "/no-verifier",
+				Destination: backend.URL,
+			},
+		},
+		Verifiers: map[string]config.VerifierConfig{
+			"ms-graph": {
+				Type:  "json_field",
+				Path:  "value.0.clientState",
+				Token: "test-token",
+			},
+			"slack": {
+				Type:          "slack",
+				SigningSecret: "test-secret",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		path             string
+		queryParams      string
+		body             string
+		expectedStatus   int
+		expectedBody     string
+		backendShouldRun bool
+	}{
+		{
+			name:             "validation token is echoed back",
+			path:             "/graph-webhook",
+			queryParams:      "validationToken=Validation%3ATestToken123",
+			body:             "",
+			expectedStatus:   http.StatusOK,
+			expectedBody:     "Validation:TestToken123",
+			backendShouldRun: false,
+		},
+		{
+			name:             "validation token with special characters",
+			path:             "/graph-webhook",
+			queryParams:      "validationToken=abc%2B%2F%3D123",
+			body:             "",
+			expectedStatus:   http.StatusOK,
+			expectedBody:     "abc+/=123",
+			backendShouldRun: false,
+		},
+		{
+			name:             "no validationToken - fails verification (empty body)",
+			path:             "/graph-webhook",
+			queryParams:      "",
+			body:             "",
+			expectedStatus:   http.StatusUnauthorized,
+			backendShouldRun: false,
+		},
+		{
+			name:             "validationToken on non-json_field route is ignored",
+			path:             "/slack-webhook",
+			queryParams:      "validationToken=ShouldBeIgnored",
+			body:             "",
+			expectedStatus:   http.StatusUnauthorized, // Slack verification fails
+			backendShouldRun: false,
+		},
+		{
+			name:             "validationToken on route without verifier is ignored",
+			path:             "/no-verifier",
+			queryParams:      "validationToken=ShouldBeIgnored",
+			body:             "",
+			expectedStatus:   http.StatusOK, // No verification needed, forwarded to backend
+			backendShouldRun: true,
+		},
+		{
+			name:             "regular Graph notification with valid body is forwarded",
+			path:             "/graph-webhook",
+			queryParams:      "",
+			body:             `{"value":[{"clientState":"test-token"}]}`,
+			expectedStatus:   http.StatusOK,
+			backendShouldRun: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			backendCalled = false
+
+			url := "https://test.com" + tc.path
+			if tc.queryParams != "" {
+				url += "?" + tc.queryParams
+			}
+
+			req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(tc.body)))
+			req.Host = "test.com"
+			req.RemoteAddr = "127.0.0.1:12345"
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+			}
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tc.expectedStatus {
+				t.Errorf("expected status %d, got %d (body: %s)", tc.expectedStatus, rr.Code, rr.Body.String())
+			}
+
+			if tc.expectedBody != "" && rr.Body.String() != tc.expectedBody {
+				t.Errorf("expected body %q, got %q", tc.expectedBody, rr.Body.String())
+			}
+
+			if backendCalled != tc.backendShouldRun {
+				if tc.backendShouldRun {
+					t.Error("expected backend to be called, but it wasn't")
+				} else {
+					t.Error("expected backend NOT to be called, but it was")
+				}
+			}
+		})
+	}
+}
+
+func TestHandler_MicrosoftGraphValidation_Relay(t *testing.T) {
+	// Test that validation is handled directly even in relay mode
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:   "test.com",
+				Path:       "/webhook",
+				Verifier:   "ms-graph",
+				RelayToken: "test-token",
+			},
+		},
+		Verifiers: map[string]config.VerifierConfig{
+			"ms-graph": {
+				Type:  "json_field",
+				Path:  "value.0.clientState",
+				Token: "test-token",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
+
+	// Setup relay manager but DON'T start polling
+	// This simulates relay mode where there might be latency or no client connected
+	rm := relay.NewManager()
+	rm.RegisterToken("test-token")
+	handler.SetRelayManager(rm)
+
+	// Send validation request
+	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook?validationToken=relay-test-token", nil)
+	req.Host = "test.com"
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Should respond immediately with token, NOT 503 (no relay client)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	if rr.Body.String() != "relay-test-token" {
+		t.Errorf("expected body 'relay-test-token', got %q", rr.Body.String())
+	}
+}
