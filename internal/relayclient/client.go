@@ -6,6 +6,12 @@ import (
 	"sync"
 )
 
+// ClientOptions configures the relay client
+type ClientOptions struct {
+	// DebugPayloads enables logging of webhook payloads for debugging
+	DebugPayloads bool
+}
+
 // Client manages relay connections for multiple channels
 type Client struct {
 	config  *Config
@@ -14,7 +20,7 @@ type Client struct {
 }
 
 // NewClient creates a new relay client
-func NewClient(cfg *Config, logger *slog.Logger) *Client {
+func NewClient(cfg *Config, logger *slog.Logger, opts ClientOptions) *Client {
 	c := &Client{
 		config:  cfg,
 		logger:  logger,
@@ -25,8 +31,8 @@ func NewClient(cfg *Config, logger *slog.Logger) *Client {
 
 	// Create pollers for each channel
 	for _, ch := range cfg.Channels {
-		forwarder := NewForwarder(ch.Destination, ch.Name, logger)
-		poller := NewPoller(cfg.Server, ch.Token, ch.Name, forwarder, logger, maxFailures, ch.GetWorkers())
+		forwarder := NewForwarder(ch.Destination, ch.Name, logger, opts.DebugPayloads)
+		poller := NewPoller(cfg.Server, ch.Token, ch.Name, forwarder, logger, maxFailures, ch.GetWorkers(), opts.DebugPayloads)
 		c.pollers = append(c.pollers, poller)
 	}
 

@@ -49,6 +49,10 @@ spec:
             - name: GATEKEEPERD_REDIS_URI
               value: {{ include "gatekeeperd.redisUri" . | quote }}
             {{- end }}
+            {{- if .Values.debug.payloads }}
+            - name: GATEKEEPERD_DEBUG_PAYLOADS
+              value: "true"
+            {{- end }}
           ports:
             {{- if .Values.tls.enabled }}
             - name: https

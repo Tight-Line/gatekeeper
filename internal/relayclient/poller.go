@@ -50,10 +50,13 @@ type Poller struct {
 	// Worker pool settings
 	workers   int
 	webhookCh chan *Webhook
+
+	// Debug settings
+	debugPayloads bool
 }
 
 // NewPoller creates a new poller for a channel
-func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logger *slog.Logger, maxConsecutiveFailures, workers int) *Poller {
+func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logger *slog.Logger, maxConsecutiveFailures, workers int, debugPayloads bool) *Poller {
 	if workers <= 0 {
 		workers = 1
 	}
@@ -65,6 +68,7 @@ func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logge
 		logger:                 logger,
 		maxConsecutiveFailures: maxConsecutiveFailures,
 		workers:                workers,
+		debugPayloads:          debugPayloads,
 		client: &http.Client{
 			Timeout: 60 * time.Second, // Longer than server poll timeout
 		},

@@ -17,6 +17,12 @@ server: "https://webhooks.example.com"
 # so that Kubernetes can restart the pod
 maxConsecutiveFailures: 10
 
+# Debug settings
+debug:
+  # Enable payload logging for debugging
+  # WARNING: This logs full webhook bodies to stdout. Use only for troubleshooting.
+  payloads: false
+
 # Relay channels configuration
 # Each channel polls for webhooks using a token and forwards to a local destination
 channels: []
