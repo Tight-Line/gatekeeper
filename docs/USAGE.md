@@ -74,10 +74,10 @@ verifiers:
     signing_secret: "${SLACK_SIGNING_SECRET}"
     max_timestamp_age: 5m
 
-# Note: Gatekeeper automatically handles Slack URL verification challenges.
-# When Slack sends a url_verification request during webhook setup,
-# gatekeeper responds immediately with the challenge - your backend
-# does not need to handle this. This works in both direct and relay modes.
+# Note: Gatekeeper automatically handles provider verification challenges:
+# - Slack: url_verification requests are answered immediately with the challenge
+# - Microsoft Graph: validationToken query params are echoed back immediately
+# Your backend does not need to handle these. This works in both direct and relay modes.
 
 validators:
   slack-event:
@@ -180,6 +180,8 @@ Path examples:
 - `value.0.clientState.secret` - if `clientState` is a JSON string, it's auto-parsed
 
 The verifier auto-parses JSON strings when needed. For example, if `clientState` contains `{"secret":"abc","routing":"data"}`, the path `value.0.clientState.secret` extracts `"abc"`.
+
+**Note:** Gatekeeper automatically handles Microsoft Graph subscription validation. When creating or renewing a subscription, Graph sends a validation request with `validationToken` as a query parameter. Gatekeeper detects this on `json_field` verifier routes and responds immediately with the token value, bypassing verification (since validation requests have empty bodies). This works in both direct and relay modes.
 
 **Noop (`type: noop`):**
 ```yaml

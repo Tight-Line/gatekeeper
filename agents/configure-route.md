@@ -267,6 +267,8 @@ Path syntax:
 - Array indices are numbers (e.g., `value.0` for first element)
 - Auto-parses JSON strings (if `clientState` is `{"tpVerificationToken":"x"}`, the path extracts `x`)
 
+**Note:** Gatekeeper automatically handles Microsoft Graph subscription validation. When creating or renewing a subscription, Graph sends a POST with `validationToken` as a query parameter and an empty body. Gatekeeper detects this on `json_field` verifier routes and responds immediately with the token value, allowing subscription setup without backend involvement.
+
 Recommended IP allowlist:
 ```yaml
 ip_allowlists:

@@ -193,6 +193,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.logRequestPayload(r, ctx)
 	}
 
+	// Handle Microsoft Graph subscription validation before verification
+	// Graph sends validationToken as query param with empty body, so json_field verification would fail
+	if h.handleMicrosoftGraphValidation(w, r, ctx) {
+		return
+	}
+
 	if !h.verifyRequest(w, r, ctx) {
 		return
 	}
@@ -350,6 +356,49 @@ func (h *Handler) handleSlackURLVerification(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(req.Challenge))
+
+	metrics.RecordRequest(ctx.hostname, ctx.route.Path, "200", time.Since(ctx.start).Seconds())
+	return true
+}
+
+// handleMicrosoftGraphValidation checks if this is a Microsoft Graph subscription validation
+// request and responds directly without verification or forwarding.
+//
+// When creating or renewing a Graph subscription, Microsoft sends a validation request:
+//   - POST to the notification URL
+//   - validationToken query parameter contains the challenge
+//   - Empty body (or minimal body) with text/plain content type
+//
+// The endpoint must respond within 10 seconds with:
+//   - HTTP 200
+//   - Content-Type: text/plain
+//   - Body: the exact validationToken value (URL-decoded)
+//
+// This handler runs BEFORE verification because the validation request has no clientState
+// in the body, so json_field verification would fail.
+//
+// Returns true if the request was handled (caller should return), false otherwise.
+func (h *Handler) handleMicrosoftGraphValidation(w http.ResponseWriter, r *http.Request, ctx *requestContext) bool {
+	// Only handle for json_field verifier routes (used by Microsoft Graph)
+	if ctx.route.Verifier == "" || h.verifierTypes[ctx.route.Verifier] != "json_field" {
+		return false
+	}
+
+	// Check for validationToken query parameter
+	validationToken := r.URL.Query().Get("validationToken")
+	if validationToken == "" {
+		return false
+	}
+
+	// This is a Graph subscription validation request - respond with the token
+	h.logger.Info("handling Microsoft Graph subscription validation",
+		"hostname", ctx.hostname,
+		"path", r.URL.Path,
+	)
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(validationToken))
 
 	metrics.RecordRequest(ctx.hostname, ctx.route.Path, "200", time.Since(ctx.start).Seconds())
 	return true
