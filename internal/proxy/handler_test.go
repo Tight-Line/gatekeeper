@@ -2447,3 +2447,179 @@ func TestHandler_WriteRelayResponse_StripsHopByHopHeaders(t *testing.T) {
 		t.Error("X-Custom header should be preserved")
 	}
 }
+
+func TestTruncateForLog(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected string
+	}{
+		{
+			name:     "short body",
+			input:    []byte("hello world"),
+			expected: "hello world",
+		},
+		{
+			name:     "empty body",
+			input:    []byte{},
+			expected: "",
+		},
+		{
+			name:     "exactly 8192 bytes",
+			input:    bytes.Repeat([]byte("a"), 8192),
+			expected: string(bytes.Repeat([]byte("a"), 8192)),
+		},
+		{
+			name:     "over 8192 bytes gets truncated",
+			input:    bytes.Repeat([]byte("a"), 10000),
+			expected: string(bytes.Repeat([]byte("a"), 8192)) + "... (truncated)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := truncateForLog(tc.input)
+			if result != tc.expected {
+				if len(tc.expected) > 100 {
+					t.Errorf("expected length %d (truncated=%v), got length %d (truncated=%v)",
+						len(tc.expected), strings.HasSuffix(tc.expected, "... (truncated)"),
+						len(result), strings.HasSuffix(result, "... (truncated)"))
+				} else {
+					t.Errorf("expected %q, got %q", tc.expected, result)
+				}
+			}
+		})
+	}
+}
+
+func TestHandler_DebugPayloads(t *testing.T) {
+	// Create a test backend
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"result":"ok"}`))
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.example.com",
+				Path:        "/webhook",
+				Destination: backend.URL,
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+
+	// Capture log output to verify debug logging
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{
+		DebugPayloads: true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "http://test.example.com/webhook", strings.NewReader(`{"test":"data"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	logOutput := logBuf.String()
+
+	// Verify debug logging occurred
+	if !strings.Contains(logOutput, "debug: incoming request") {
+		t.Error("expected 'debug: incoming request' in logs")
+	}
+	// Body is logged as a JSON string field (quotes escaped), just check key parts exist
+	if !strings.Contains(logOutput, "test") {
+		t.Error("expected request body content in debug logs")
+	}
+	if !strings.Contains(logOutput, "debug: outgoing response") {
+		t.Error("expected 'debug: outgoing response' in logs")
+	}
+	if !strings.Contains(logOutput, "result") {
+		t.Error("expected response body content in debug logs")
+	}
+}
+
+func TestHandler_DebugPayloads_Relay(t *testing.T) {
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:   "test.example.com",
+				Path:       "/webhook",
+				RelayToken: "test-token",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{
+		DebugPayloads: true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	// Set up relay manager
+	relayMgr := relay.NewMemoryManager()
+	relayMgr.RegisterToken("test-token")
+	handler.SetRelayManager(relayMgr)
+
+	// Start relay client goroutine first and give it time to start polling
+	pollStarted := make(chan struct{})
+	go func() {
+		close(pollStarted)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		webhook, err := relayMgr.Poll(ctx, "test-token")
+		if err != nil || webhook == nil {
+			return
+		}
+		_ = relayMgr.SendResponse(&relay.Response{
+			RequestID:  webhook.ID,
+			StatusCode: 200,
+			Headers:    map[string][]string{"Content-Type": {"application/json"}},
+			Body:       base64.StdEncoding.EncodeToString([]byte(`{"relayed":"true"}`)),
+		})
+	}()
+
+	// Wait for poll to start
+	<-pollStarted
+	time.Sleep(10 * time.Millisecond)
+
+	req := httptest.NewRequest("POST", "http://test.example.com/webhook", strings.NewReader(`{"relay":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	logOutput := logBuf.String()
+
+	// Verify debug logging occurred for relay
+	if !strings.Contains(logOutput, "debug: incoming request") {
+		t.Error("expected 'debug: incoming request' in logs")
+	}
+	if !strings.Contains(logOutput, "debug: outgoing response") {
+		t.Error("expected 'debug: outgoing response' in logs")
+	}
+}

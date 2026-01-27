@@ -38,6 +38,10 @@ type HandlerOptions struct {
 	// MaxBodySize is the maximum allowed request body size in bytes.
 	// If zero, defaults to config.DefaultMaxBodySize (10MB).
 	MaxBodySize int64
+
+	// DebugPayloads enables logging of request/response payloads for debugging.
+	// When enabled, request bodies and response bodies are logged to stdout.
+	DebugPayloads bool
 }
 
 // Handler handles incoming webhook requests
@@ -51,6 +55,7 @@ type Handler struct {
 	logger             *slog.Logger
 	trustXForwardedFor bool
 	maxBodySize        int64
+	debugPayloads      bool
 
 	// Route lookup maps
 	routesByHostPath map[string]*config.RouteConfig // "host:path" -> route
@@ -72,6 +77,7 @@ func NewHandler(cfg *config.Config, filters *ipfilter.FilterSet, logger *slog.Lo
 		logger:             logger,
 		trustXForwardedFor: opts.TrustXForwardedFor,
 		maxBodySize:        maxBodySize,
+		debugPayloads:      opts.DebugPayloads,
 		routesByHostPath:   make(map[string]*config.RouteConfig),
 	}
 
@@ -180,6 +186,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx.body, err = h.readBody(w, r, ctx)
 	if err != nil {
 		return
+	}
+
+	// Log incoming request payload if debug is enabled
+	if h.debugPayloads {
+		h.logRequestPayload(r, ctx)
 	}
 
 	if !h.verifyRequest(w, r, ctx) {
@@ -403,6 +414,12 @@ func (h *Handler) handleRelay(w http.ResponseWriter, r *http.Request, ctx *reque
 	deliveryDuration := time.Since(deliveryStart).Seconds()
 	metrics.RecordRelayWebhookDelivered(ctx.route.RelayToken, deliveryDuration)
 
+	// Log response payload if debug is enabled
+	if h.debugPayloads {
+		respBody, _ := base64.StdEncoding.DecodeString(resp.Body)
+		h.logResponsePayload(ctx, resp.StatusCode, respBody)
+	}
+
 	h.writeRelayResponse(w, resp)
 	statusStr := fmt.Sprintf("%d", resp.StatusCode)
 	metrics.RecordRequest(ctx.hostname, ctx.route.Path, statusStr, time.Since(ctx.start).Seconds())
@@ -447,7 +464,7 @@ func (h *Handler) handleRelayError(w http.ResponseWriter, r *http.Request, ctx *
 }
 
 func (h *Handler) handleForward(w http.ResponseWriter, r *http.Request, ctx *requestContext) {
-	status, err := h.forward(w, r, ctx.route, ctx.body)
+	status, respBody, err := h.forward(w, r, ctx.route, ctx.body, h.debugPayloads)
 	if err != nil {
 		h.logger.Error("forward failed",
 			"hostname", ctx.hostname,
@@ -459,6 +476,11 @@ func (h *Handler) handleForward(w http.ResponseWriter, r *http.Request, ctx *req
 		metrics.RecordRequest(ctx.hostname, ctx.route.Path, "502", time.Since(ctx.start).Seconds())
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
+	}
+
+	// Log response payload if debug is enabled
+	if h.debugPayloads && respBody != nil {
+		h.logResponsePayload(ctx, status, respBody)
 	}
 
 	statusStr := fmt.Sprintf("%d", status)
@@ -498,11 +520,12 @@ func (h *Handler) findRoute(hostname, path string) *config.RouteConfig {
 	return nil
 }
 
-// forward proxies the request to the destination transparently and returns the upstream status code
-func (h *Handler) forward(w http.ResponseWriter, r *http.Request, route *config.RouteConfig, body []byte) (int, error) {
+// forward proxies the request to the destination transparently and returns the upstream status code.
+// If captureBody is true, it also returns the response body for debugging.
+func (h *Handler) forward(w http.ResponseWriter, r *http.Request, route *config.RouteConfig, body []byte, captureBody bool) (status int, respBody []byte, err error) {
 	destURL, err := url.Parse(route.Destination)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	// For prefix routes, preserve the path suffix beyond the route prefix
@@ -513,8 +536,8 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request, route *config.
 		pathSuffix = "/" + pathSuffix
 	}
 
-	// Wrap response writer to capture status code
-	recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	// Wrap response writer to capture status code (and optionally body)
+	recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK, captureBody: captureBody}
 
 	// Create reverse proxy
 	proxy := &httputil.ReverseProxy{
@@ -563,18 +586,27 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request, route *config.
 	}
 
 	proxy.ServeHTTP(recorder, r)
-	return recorder.status, nil
+	return recorder.status, recorder.body, nil
 }
 
-// statusRecorder wraps http.ResponseWriter to capture the status code
+// statusRecorder wraps http.ResponseWriter to capture the status code and optionally the body
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status      int
+	captureBody bool
+	body        []byte
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if r.captureBody {
+		r.body = append(r.body, b...)
+	}
+	return r.ResponseWriter.Write(b)
 }
 
 // categorizeVerificationError returns a fixed category string for a verification error.
@@ -695,4 +727,36 @@ func (h *Handler) writeRelayResponse(w http.ResponseWriter, resp *relay.Response
 	if len(body) > 0 {
 		_, _ = w.Write(body)
 	}
+}
+
+// logRequestPayload logs the incoming request payload for debugging
+func (h *Handler) logRequestPayload(r *http.Request, ctx *requestContext) {
+	h.logger.Info("debug: incoming request",
+		"hostname", ctx.hostname,
+		"path", r.URL.Path,
+		"method", r.Method,
+		"content_type", r.Header.Get("Content-Type"),
+		"content_length", len(ctx.body),
+		"body", truncateForLog(ctx.body),
+	)
+}
+
+// logResponsePayload logs the outgoing response payload for debugging
+func (h *Handler) logResponsePayload(ctx *requestContext, statusCode int, body []byte) {
+	h.logger.Info("debug: outgoing response",
+		"hostname", ctx.hostname,
+		"path", ctx.route.Path,
+		"status", statusCode,
+		"content_length", len(body),
+		"body", truncateForLog(body),
+	)
+}
+
+// truncateForLog returns the body as a string, truncated if too long
+func truncateForLog(body []byte) string {
+	const maxLen = 8192 // 8KB max for logging
+	if len(body) <= maxLen {
+		return string(body)
+	}
+	return string(body[:maxLen]) + "... (truncated)"
 }

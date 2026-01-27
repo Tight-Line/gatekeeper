@@ -1,6 +1,7 @@
 package relayclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -8,12 +9,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func TestNewForwarder(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder("http://localhost:8080", "test-channel", logger)
+	f := NewForwarder("http://localhost:8080", "test-channel", logger, false)
 
 	if f.destination != "http://localhost:8080" {
 		t.Errorf("expected destination 'http://localhost:8080', got %q", f.destination)
@@ -36,7 +38,7 @@ func TestForwarder_Forward_Success(t *testing.T) {
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder(server.URL, "test-channel", logger)
+	f := NewForwarder(server.URL, "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:      "webhook-123",
@@ -91,7 +93,7 @@ func TestForwarder_Forward_Success(t *testing.T) {
 
 func TestForwarder_Forward_InvalidBase64Body(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder("http://localhost:8080", "test-channel", logger)
+	f := NewForwarder("http://localhost:8080", "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -109,7 +111,7 @@ func TestForwarder_Forward_InvalidBase64Body(t *testing.T) {
 func TestForwarder_Forward_ServerError(t *testing.T) {
 	// Server is not reachable
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder("http://localhost:99999", "test-channel", logger)
+	f := NewForwarder("http://localhost:99999", "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -133,7 +135,7 @@ func TestForwarder_Forward_ContextCancelled(t *testing.T) {
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder(server.URL, "test-channel", logger)
+	f := NewForwarder(server.URL, "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -153,7 +155,7 @@ func TestForwarder_Forward_ContextCancelled(t *testing.T) {
 
 func TestForwarder_Forward_InvalidMethod(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder("http://localhost:8080", "test-channel", logger)
+	f := NewForwarder("http://localhost:8080", "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -192,7 +194,7 @@ func (t *errorTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 
 func TestForwarder_Forward_BodyReadError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder("http://localhost:8080", "test-channel", logger)
+	f := NewForwarder("http://localhost:8080", "test-channel", logger, false)
 	f.client = &http.Client{Transport: &errorTransport{}}
 
 	webhook := &Webhook{
@@ -210,7 +212,7 @@ func TestForwarder_Forward_BodyReadError(t *testing.T) {
 
 func TestForwarder_Forward_InvalidDestination(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder("://invalid-url", "test-channel", logger)
+	f := NewForwarder("://invalid-url", "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -227,7 +229,7 @@ func TestForwarder_Forward_InvalidDestination(t *testing.T) {
 
 func TestForwarder_Forward_InvalidWebhookPath(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder("http://localhost:8080", "test-channel", logger)
+	f := NewForwarder("http://localhost:8080", "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -251,7 +253,7 @@ func TestForwarder_Forward_PreservesQueryString(t *testing.T) {
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder(server.URL, "test-channel", logger)
+	f := NewForwarder(server.URL, "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -280,7 +282,7 @@ func TestForwarder_Forward_CombinesBasePath(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// Destination has a base path /api
-	f := NewForwarder(server.URL+"/api", "test-channel", logger)
+	f := NewForwarder(server.URL+"/api", "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -348,7 +350,7 @@ func TestForwarder_Forward_MergesQueryParams(t *testing.T) {
 			if tc.destQuery != "" {
 				destURL += "?" + tc.destQuery
 			}
-			f := NewForwarder(destURL, "test-channel", logger)
+			f := NewForwarder(destURL, "test-channel", logger, false)
 
 			webhookPath := "/webhook"
 			if tc.webhookQuery != "" {
@@ -420,7 +422,7 @@ func TestForwarder_Forward_PreserveHost(t *testing.T) {
 			defer server.Close()
 
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			f := NewForwarder(server.URL, "test-channel", logger)
+			f := NewForwarder(server.URL, "test-channel", logger, false)
 
 			headers := map[string][]string{
 				"Content-Type": {"application/json"},
@@ -482,7 +484,7 @@ func TestForwarder_Forward_StripsHopByHopHeaders(t *testing.T) {
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	f := NewForwarder(server.URL, "test-channel", logger)
+	f := NewForwarder(server.URL, "test-channel", logger, false)
 
 	webhook := &Webhook{
 		ID:     "webhook-123",
@@ -533,5 +535,100 @@ func TestForwarder_Forward_StripsHopByHopHeaders(t *testing.T) {
 	// Custom response header should be preserved
 	if len(resp.Headers["X-Custom-Response"]) == 0 || resp.Headers["X-Custom-Response"][0] != "preserved" {
 		t.Error("X-Custom-Response header should be preserved")
+	}
+}
+
+func TestForwarder_DebugPayloads(t *testing.T) {
+	// Create a local server that responds
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"response":"data"}`))
+	}))
+	defer server.Close()
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+	// Enable debug payloads
+	f := NewForwarder(server.URL, "test-channel", logger, true)
+
+	webhook := &Webhook{
+		ID:      "webhook-debug-test",
+		Method:  "POST",
+		Path:    "/test",
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
+		Body:    base64.StdEncoding.EncodeToString([]byte(`{"request":"data"}`)),
+	}
+
+	resp, err := f.Forward(context.Background(), webhook)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	logOutput := logBuf.String()
+
+	// Verify debug logging occurred
+	if !strings.Contains(logOutput, "debug: incoming webhook") {
+		t.Error("expected 'debug: incoming webhook' in logs")
+	}
+	// Body is logged as a string field in JSON - check it contains the data (may be escaped)
+	if !strings.Contains(logOutput, "request") || !strings.Contains(logOutput, "data") {
+		t.Error("expected request body content in debug logs")
+	}
+	if !strings.Contains(logOutput, "debug: destination response") {
+		t.Error("expected 'debug: destination response' in logs")
+	}
+	if !strings.Contains(logOutput, "response") {
+		t.Error("expected response body content in debug logs")
+	}
+}
+
+func TestTruncateForLog(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected string
+	}{
+		{
+			name:     "short body",
+			input:    []byte("hello world"),
+			expected: "hello world",
+		},
+		{
+			name:     "empty body",
+			input:    []byte{},
+			expected: "",
+		},
+		{
+			name:     "exactly 8192 bytes",
+			input:    bytes.Repeat([]byte("a"), 8192),
+			expected: string(bytes.Repeat([]byte("a"), 8192)),
+		},
+		{
+			name:     "over 8192 bytes gets truncated",
+			input:    bytes.Repeat([]byte("a"), 10000),
+			expected: string(bytes.Repeat([]byte("a"), 8192)) + "... (truncated)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := truncateForLog(tc.input)
+			if result != tc.expected {
+				if len(tc.expected) > 100 {
+					t.Errorf("expected length %d (truncated=%v), got length %d (truncated=%v)",
+						len(tc.expected), strings.HasSuffix(tc.expected, "... (truncated)"),
+						len(result), strings.HasSuffix(result, "... (truncated)"))
+				} else {
+					t.Errorf("expected %q, got %q", tc.expected, result)
+				}
+			}
+		})
 	}
 }

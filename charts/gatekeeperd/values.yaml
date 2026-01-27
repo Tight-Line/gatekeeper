@@ -124,6 +124,12 @@ metrics:
 logging:
   level: info
 
+# Debug settings
+debug:
+  # Enable payload logging for debugging
+  # WARNING: This logs full request/response bodies to stdout. Use only for troubleshooting.
+  payloads: false
+
 # ==============================================================================
 # IP ALLOWLISTS: Predefined lists for common webhook providers
 # ==============================================================================

@@ -25,18 +25,20 @@ type Response struct {
 
 // Forwarder delivers webhooks to a local destination and returns responses
 type Forwarder struct {
-	destination string
-	channelName string
-	logger      *slog.Logger
-	client      *http.Client
+	destination   string
+	channelName   string
+	logger        *slog.Logger
+	client        *http.Client
+	debugPayloads bool
 }
 
 // NewForwarder creates a new forwarder for a channel
-func NewForwarder(destination, channelName string, logger *slog.Logger) *Forwarder {
+func NewForwarder(destination, channelName string, logger *slog.Logger, debugPayloads bool) *Forwarder {
 	return &Forwarder{
-		destination: destination,
-		channelName: channelName,
-		logger:      logger,
+		destination:   destination,
+		channelName:   channelName,
+		logger:        logger,
+		debugPayloads: debugPayloads,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -48,6 +50,18 @@ func (f *Forwarder) Forward(ctx context.Context, webhook *Webhook) (*Response, e
 	body, err := base64.StdEncoding.DecodeString(webhook.Body)
 	if err != nil {
 		return nil, fmt.Errorf("decoding body: %w", err)
+	}
+
+	// Log incoming webhook payload if debug is enabled
+	if f.debugPayloads {
+		f.logger.Info("debug: incoming webhook",
+			"channel", f.channelName,
+			"webhook_id", webhook.ID,
+			"method", webhook.Method,
+			"path", webhook.Path,
+			"content_length", len(body),
+			"body", truncateForLog(body),
+		)
 	}
 
 	req, err := f.buildRequest(ctx, webhook, body)
@@ -157,10 +171,30 @@ func (f *Forwarder) buildResponse(webhook *Webhook, resp *http.Response, duratio
 		"duration_ms", duration.Milliseconds(),
 	)
 
+	// Log response payload if debug is enabled
+	if f.debugPayloads {
+		f.logger.Info("debug: destination response",
+			"channel", f.channelName,
+			"webhook_id", webhook.ID,
+			"status", resp.StatusCode,
+			"content_length", len(respBody),
+			"body", truncateForLog(respBody),
+		)
+	}
+
 	return &Response{
 		RequestID:  webhook.ID,
 		StatusCode: resp.StatusCode,
 		Headers:    respHeaders,
 		Body:       base64.StdEncoding.EncodeToString(respBody),
 	}, nil
+}
+
+// truncateForLog returns the body as a string, truncated if too long
+func truncateForLog(body []byte) string {
+	const maxLen = 8192 // 8KB max for logging
+	if len(body) <= maxLen {
+		return string(body)
+	}
+	return string(body[:maxLen]) + "... (truncated)"
 }

@@ -26,7 +26,13 @@ func main() {
 
 func run() error {
 	configPath := flag.String("config", "./gatekeeper-relay.yaml", "Path to configuration file (ignored if GATEKEEPER_RELAY_CONFIG env var is set)")
+	debugPayloads := flag.Bool("debug-payloads", false, "Log webhook payloads to stdout for debugging")
 	flag.Parse()
+
+	// Environment variables override flags
+	if os.Getenv("GATEKEEPER_RELAY_DEBUG_PAYLOADS") == "true" {
+		*debugPayloads = true
+	}
 
 	// Setup structured logging
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -72,8 +78,14 @@ func run() error {
 		cancel()
 	}()
 
+	if *debugPayloads {
+		logger.Info("debug payloads enabled - webhook bodies will be logged")
+	}
+
 	// Create and run client
-	client := relayclient.NewClient(cfg, logger)
+	client := relayclient.NewClient(cfg, logger, relayclient.ClientOptions{
+		DebugPayloads: *debugPayloads,
+	})
 	if err := client.Run(ctx); err != nil {
 		return fmt.Errorf("relay client failed: %w", err)
 	}

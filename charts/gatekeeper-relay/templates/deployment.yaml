@@ -38,6 +38,10 @@ spec:
                 configMapKeyRef:
                   name: {{ include "gatekeeper-relay.fullname" . }}-config
                   key: config.yaml
+            {{- if .Values.debug.payloads }}
+            - name: GATEKEEPER_RELAY_DEBUG_PAYLOADS
+              value: "true"
+            {{- end }}
           envFrom:
             - secretRef:
                 name: {{ include "gatekeeper-relay.secretName" . }}

@@ -23,7 +23,7 @@ func TestNewClient(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client := NewClient(cfg, logger)
+	client := NewClient(cfg, logger, ClientOptions{})
 
 	if client.ChannelCount() != 2 {
 		t.Errorf("expected 2 channels, got %d", client.ChannelCount())
@@ -49,7 +49,7 @@ func TestClient_Run_ContextCancelled(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client := NewClient(cfg, logger)
+	client := NewClient(cfg, logger, ClientOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -76,7 +76,7 @@ func TestClient_Run_MaxConsecutiveFailures(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client := NewClient(cfg, logger)
+	client := NewClient(cfg, logger, ClientOptions{})
 
 	// Give it enough time to fail multiple times
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -138,7 +138,7 @@ func TestClient_Run_WebhookDelivery(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client := NewClient(cfg, logger)
+	client := NewClient(cfg, logger, ClientOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

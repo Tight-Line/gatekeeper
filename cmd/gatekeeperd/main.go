@@ -37,6 +37,7 @@ func run() error {
 	enableTLS := flag.Bool("tls", false, "Enable ACME TLS (requires ports 80 and 443)")
 	trustXFF := flag.Bool("trust-x-forwarded-for", false, "Trust X-Forwarded-For header for client IP (set when behind ingress/proxy)")
 	redisURI := flag.String("redis-uri", "", "Redis/Valkey URI for multi-replica relay (e.g., redis://localhost:6379)")
+	debugPayloads := flag.Bool("debug-payloads", false, "Log request/response payloads to stdout for debugging")
 	flag.Parse()
 
 	// Environment variables override flags
@@ -45,6 +46,9 @@ func run() error {
 	}
 	if envRedisURI := os.Getenv("GATEKEEPERD_REDIS_URI"); envRedisURI != "" {
 		*redisURI = envRedisURI
+	}
+	if os.Getenv("GATEKEEPERD_DEBUG_PAYLOADS") == "true" {
+		*debugPayloads = true
 	}
 
 	// Setup structured logging
@@ -78,6 +82,7 @@ func run() error {
 	handler, err := proxy.NewHandler(cfg, filters, logger, proxy.HandlerOptions{
 		TrustXForwardedFor: *trustXFF,
 		MaxBodySize:        cfg.Global.MaxBodySize,
+		DebugPayloads:      *debugPayloads,
 	})
 	if err != nil {
 		return fmt.Errorf("creating handler: %w", err)
@@ -85,6 +90,9 @@ func run() error {
 
 	if *trustXFF {
 		logger.Info("trusting X-Forwarded-For header for client IP")
+	}
+	if *debugPayloads {
+		logger.Info("debug payloads enabled - request/response bodies will be logged")
 	}
 
 	// Setup relay manager if any routes use relay tokens

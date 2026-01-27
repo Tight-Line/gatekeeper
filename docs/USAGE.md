@@ -29,6 +29,11 @@ Flags:
         Trust the X-Forwarded-For header for determining client IP.
         Enable this when running behind an ingress controller or
         L7 load balancer. See docs/X_FORWARDED_FOR.md for details.
+
+  -debug-payloads
+        Log request and response bodies to stdout for debugging.
+        WARNING: This logs sensitive payload data. Use only for
+        troubleshooting in non-production environments.
 ```
 
 ### Environment Variables
@@ -37,6 +42,7 @@ Flags:
 |----------|-------------|
 | `GATEKEEPERD_CONFIG` | Full YAML configuration content. When set, the `-config` flag is ignored. Used by Helm charts to inject ConfigMap content. |
 | `GATEKEEPERD_TRUST_X_FORWARDED_FOR` | Set to `true` to trust X-Forwarded-For header. Equivalent to `-trust-x-forwarded-for` flag. |
+| `GATEKEEPERD_DEBUG_PAYLOADS` | Set to `true` to log request/response bodies. Equivalent to `-debug-payloads` flag. |
 
 ### Configuration File
 
@@ -332,6 +338,11 @@ Flags:
   -config string
         Path to configuration file (default "./gatekeeper-relay.yaml")
         Ignored if GATEKEEPER_RELAY_CONFIG environment variable is set.
+
+  -debug-payloads
+        Log webhook payloads to stdout for debugging.
+        WARNING: This logs sensitive payload data. Use only for
+        troubleshooting in non-production environments.
 ```
 
 ### Environment Variables
@@ -339,6 +350,7 @@ Flags:
 | Variable | Description |
 |----------|-------------|
 | `GATEKEEPER_RELAY_CONFIG` | Full YAML configuration content. When set, the `-config` flag is ignored. |
+| `GATEKEEPER_RELAY_DEBUG_PAYLOADS` | Set to `true` to log webhook bodies. Equivalent to `-debug-payloads` flag. |
 
 ### Configuration File
 
