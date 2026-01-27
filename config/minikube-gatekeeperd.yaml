@@ -41,6 +41,22 @@ ipAllowlists:
 verifiers:
   noop:
     type: noop
+  test-gitlab:
+    type: gitlab
+    tokenKey: GITLAB_WEBHOOK_TOKEN
+  test-github:
+    type: github
+    secretKey: GITHUB_WEBHOOK_SECRET
+  test-slack:
+    type: slack
+    signingSecretKey: SLACK_SIGNING_SECRET
+    maxTimestampAge: 5m
+  shopify-store-a:
+    type: shopify
+    secretKey: SHOPIFY_SECRET_A
+  shopify-store-b:
+    type: shopify
+    secretKey: SHOPIFY_SECRET_B
 
 # Routes for testing both direct forwarding and relay delivery
 routes:
@@ -58,6 +74,60 @@ routes:
     verifier: noop
     relayTokenKey: RELAY_TOKEN
 
+  # Direct delivery
+  - hostname: test.local
+    path: /direct/gitlab
+    ipAllowlist: allow-all
+    verifier: test-gitlab
+    destination: https://httpbin.org/post
+
+  - hostname: test.local
+    path: /direct/github
+    ipAllowlist: allow-all
+    verifier: test-github
+    destination: https://httpbin.org/post
+
+  # Relay delivery
+  - hostname: test.local
+    path: /relay/gitlab
+    ipAllowlist: allow-all
+    verifier: test-gitlab
+    relayTokenKey: RELAY_TOKEN_GITLAB
+
+  - hostname: test.local
+    path: /relay/github
+    ipAllowlist: allow-all
+    verifier: test-github
+    relayTokenKey: RELAY_TOKEN_GITHUB
+
+  - hostname: test.local
+    path: /relay/slack
+    ipAllowlist: allow-all
+    verifier: test-slack
+    relayTokenKey: RELAY_TOKEN_SLACK
+
+  - hostname: test.local
+    path: /relay/shopify/store-a
+    ipAllowlist: allow-all
+    verifier: shopify-store-a
+    relayTokenKey: RELAY_TOKEN_SHOPIFY_A
+
+  - hostname: test.local
+    path: /relay/shopify/store-b
+    ipAllowlist: allow-all
+    verifier: shopify-store-b
+    relayTokenKey: RELAY_TOKEN_SHOPIFY_B
+
 # Secrets for relay token (must match gatekeeper-relay config)
 secrets:
   RELAY_TOKEN: "minikube-test-relay-token"
+  GITLAB_WEBHOOK_TOKEN: "test-gitlab-secret"
+  GITHUB_WEBHOOK_SECRET: "test-github-secret"
+  SLACK_SIGNING_SECRET: "test-slack-secret"
+  SHOPIFY_SECRET_A: "test-shopify-secret-a"
+  SHOPIFY_SECRET_B: "test-shopify-secret-b"
+  RELAY_TOKEN_GITLAB: "relay-token-gitlab"
+  RELAY_TOKEN_GITHUB: "relay-token-github"
+  RELAY_TOKEN_SLACK: "relay-token-slack"
+  RELAY_TOKEN_SHOPIFY_A: "relay-token-shopify-a"
+  RELAY_TOKEN_SHOPIFY_B: "relay-token-shopify-b"
