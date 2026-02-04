@@ -15,7 +15,7 @@ COPY internal/ internal/
 RUN CGO_ENABLED=0 GOOS=linux go build -o gatekeeper-relay ./cmd/gatekeeper-relay
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.23.3
 
 LABEL org.opencontainers.image.source=https://github.com/Tight-Line/gatekeeper
 
