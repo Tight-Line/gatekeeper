@@ -271,6 +271,10 @@ func TestValidate_ValidConfig(t *testing.T) {
 			"noop": {
 				Type: "noop",
 			},
+			"gitlab": {
+				Type:  "gitlab",
+				Token: "token",
+			},
 		},
 		Routes: []RouteConfig{
 			{
@@ -956,5 +960,20 @@ func TestValidate_ValidHeaderQueryParamVerifier(t *testing.T) {
 	err := cfg.Validate()
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_GitLabVerifierRequiresToken(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type: "gitlab",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for gitlab verifier without token")
 	}
 }
