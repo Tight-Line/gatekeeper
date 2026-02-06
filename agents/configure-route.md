@@ -17,6 +17,7 @@ Ask which webhook provider they want to configure. Offer these options:
 
 - **Slack** - Slack Events API, slash commands, interactive components
 - **GitHub** - Repository webhooks, organization webhooks
+- **GitLab** - Repository/project webhooks, group webhooks
 - **Shopify** - Store webhooks (orders, products, customers)
 - **Google Calendar** - Calendar push notifications (X-Goog-Channel-Token header)
 - **Microsoft Graph** - Outlook Calendar, OneDrive change notifications (token in JSON body)
@@ -66,6 +67,7 @@ For relay mode: This is the URL the relay client will forward to locally.
 Suggest provider-specific defaults:
 - Slack: `http://your-app:8080/webhooks/slack` or `/slack/events`
 - GitHub: `http://your-app:8080/webhooks/github` or `/github/events`
+- GitLab: `http://your-app:8080/webhooks/gitlab` or `/gitlab/events`
 - Shopify: `http://your-app:8080/webhooks/shopify`
 - Google Calendar: `http://your-app:8080/webhooks/gcal` or `/calendar/notifications`
 - Microsoft Graph: `http://your-app:8080/webhooks/graph` or `/graph/notifications`
@@ -201,6 +203,35 @@ ip_allowlists:
     fetch_jq: ".hooks[]"
     refresh_interval: 24h
 ```
+
+#### GitLab
+
+1. Go to your GitLab project/group settings
+2. Navigate to Settings > Webhooks
+3. Click "Add new webhook"
+4. Set the URL to: `https://{hostname}{path}`
+5. Enter a secret token in the "Secret token" field
+6. Select the events you want to trigger the webhook
+7. Set the environment variable: `export GITLAB_WEBHOOK_TOKEN="your-secret-token"`
+
+Configuration uses:
+```yaml
+verifiers:
+  gitlab:
+    type: gitlab
+    token: "${GITLAB_WEBHOOK_TOKEN}"
+```
+
+Recommended IP allowlist (GitLab.com):
+```yaml
+ip_allowlists:
+  gitlab:
+    cidrs:
+      - "34.74.90.64/28"
+      - "34.74.226.0/24"
+```
+
+Note: Self-hosted GitLab instances will have different IP addresses. Check your instance's outbound IP or skip IP allowlisting.
 
 #### Shopify
 

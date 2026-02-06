@@ -8,6 +8,7 @@ Webhook providers we want to support in the future. Contributions welcome.
 |----------|----------|---------------|
 | Slack | Communication | `slack` |
 | GitHub | DevOps | `github` |
+| GitLab | DevOps | `gitlab` |
 | Shopify | E-commerce | `shopify` |
 | Google Calendar | Productivity | `api_key` |
 | Generic HMAC | Any | `hmac` |
@@ -20,7 +21,6 @@ Well-documented APIs with straightforward signature schemes.
 | Provider | Category | Signature Method | Docs |
 |----------|----------|------------------|------|
 | Stripe | Payments | HMAC-SHA256 with timestamp | [link](https://stripe.com/docs/webhooks/signatures) |
-| GitLab | DevOps | Token header or HMAC-SHA256 | [link](https://docs.gitlab.com/ee/user/project/integrations/webhooks.html) |
 | Twilio | Communication | HMAC-SHA1 of URL + params | [link](https://www.twilio.com/docs/usage/webhooks/webhooks-security) |
 | SendGrid | Email | ECDSA signature | [link](https://docs.sendgrid.com/for-developers/tracking-events/getting-started-event-webhook-security-features) |
 | PagerDuty | Ops | HMAC-SHA256 | [link](https://developer.pagerduty.com/docs/webhooks/v3-overview/) |

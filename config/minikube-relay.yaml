@@ -26,6 +26,31 @@ channels:
     tokenKey: RELAY_TOKEN
     destination: https://httpbin.org/anything
 
+  - name: gitlab
+    tokenKey: RELAY_TOKEN_GITLAB
+    destination: https://httpbin.org/anything?source=gitlab
+
+  - name: github
+    tokenKey: RELAY_TOKEN_GITHUB
+    destination: https://httpbin.org/anything?source=github
+
+  - name: slack
+    tokenKey: RELAY_TOKEN_SLACK
+    destination: https://httpbin.org/anything?source=slack
+
+  - name: shopify-store-a
+    tokenKey: RELAY_TOKEN_SHOPIFY_A
+    destination: https://httpbin.org/anything?source=shopify-a
+
+  - name: shopify-store-b
+    tokenKey: RELAY_TOKEN_SHOPIFY_B
+    destination: https://httpbin.org/anything?source=shopify-b
+
 # Secrets - must match the relay token in gatekeeperd config
 secrets:
   RELAY_TOKEN: "minikube-test-relay-token"
+  RELAY_TOKEN_GITLAB: "relay-token-gitlab"
+  RELAY_TOKEN_GITHUB: "relay-token-github"
+  RELAY_TOKEN_SLACK: "relay-token-slack"
+  RELAY_TOKEN_SHOPIFY_A: "relay-token-shopify-a"
+  RELAY_TOKEN_SHOPIFY_B: "relay-token-shopify-b"
