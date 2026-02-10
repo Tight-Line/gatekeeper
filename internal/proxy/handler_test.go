@@ -667,6 +667,7 @@ func TestNewHandler_BuildVerifiers(t *testing.T) {
 			"query_param":        {Type: "query_param", Name: "token", Token: "secret"},
 			"header_query_param": {Type: "header_query_param", Header: "X-Goog-Channel-Token", Name: "secret", Token: "mytoken"},
 			"noop":               {Type: "noop"},
+			"gitlab":             {Type: "gitlab", Token: "secret"},
 		},
 	}
 
@@ -679,8 +680,8 @@ func TestNewHandler_BuildVerifiers(t *testing.T) {
 	}
 
 	// Verify all verifiers were created
-	if len(handler.verifiers) != 9 {
-		t.Errorf("expected 9 verifiers, got %d", len(handler.verifiers))
+	if len(handler.verifiers) != 10 {
+		t.Errorf("expected 10 verifiers, got %d", len(handler.verifiers))
 	}
 }
 
@@ -2285,6 +2286,7 @@ func TestHandler_VerifierTypesMap(t *testing.T) {
 			"my-github":  {Type: "github", Secret: "secret"},
 			"my-shopify": {Type: "shopify", Secret: "secret"},
 			"my-noop":    {Type: "noop"},
+			"my-gitlab":  {Type: "gitlab", Token: "secret"},
 		},
 	}
 
@@ -2308,6 +2310,9 @@ func TestHandler_VerifierTypesMap(t *testing.T) {
 	}
 	if handler.verifierTypes["my-noop"] != "noop" {
 		t.Errorf("expected verifierTypes['my-noop']='noop', got %q", handler.verifierTypes["my-noop"])
+	}
+	if handler.verifierTypes["my-gitlab"] != "gitlab" {
+		t.Errorf("expected verifierTypes['my-gitlab']='gitlab', got %q", handler.verifierTypes["my-gitlab"])
 	}
 }
 

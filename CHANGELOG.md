@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Rate limiting support with token bucket algorithm: configure global and per-route rate limiters with total and per-IP limits, burst allowance, and automatic cleanup of stale entries. Returns HTTP 429 with Retry-After header when exceeded. New metric: `gatekeeper_rate_limited_total{route,limiter,reason}`
 
+## [0.2.7] - 2026-02-10
+
+### Added
+- `gitlab` verifier type for GitLab webhook authentication via `X-Gitlab-Token` header
+- `gitlab` predefined IP allowlist for GitLab.com webhook source IPs (`34.74.90.64/28`, `34.74.226.0/24`)
+
 ## [0.2.6] - 2026-01-27
 ### Added
 - Microsoft Graph subscription validation handling: automatically responds to `validationToken` query parameter on `json_field` verifier routes, enabling webhook setup without backend involvement (similar to Slack URL verification)

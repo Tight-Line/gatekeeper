@@ -36,6 +36,12 @@ ip_allowlists:
     fetch_jq: ".prefixes[].ipv4Prefix"
     refresh_interval: 24h
 
+  # GitLab.com IP ranges (static)
+  gitlab:
+    cidrs:
+      - "34.74.90.64/28"
+      - "34.74.226.0/24"
+
   # Static IP list for internal or known services
   internal-only:
     cidrs:
@@ -64,6 +70,11 @@ verifiers:
   martindale-github:
     type: github
     secret: "${MARTINDALE_GITHUB_WEBHOOK_SECRET}"
+
+  # GitLab webhook verification (simple token in header)
+  example-gitlab:
+    type: gitlab
+    token: "${GITLAB_WEBHOOK_TOKEN}"
 
   # Shared noop verifier for testing/development
   none:

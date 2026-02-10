@@ -54,7 +54,7 @@ type RateLimiterConfig struct {
 
 // VerifierConfig defines a webhook signature verifier
 type VerifierConfig struct {
-	Type string `yaml:"type"` // slack, github, shopify, api_key, hmac, json_field, query_param, header_query_param, noop
+	Type string `yaml:"type"` // slack, github, gitlab, shopify, api_key, hmac, json_field, query_param, header_query_param, noop
 
 	// For slack verifier
 	SigningSecret   string        `yaml:"signing_secret,omitempty"`
@@ -254,6 +254,10 @@ func validateVerifier(name string, v VerifierConfig) error {
 	case "github", "shopify":
 		if v.Secret == "" {
 			return fmt.Errorf("verifier %q: secret is required for %s verifier", name, v.Type)
+		}
+	case "gitlab":
+		if v.Token == "" {
+			return fmt.Errorf("verifier %q: token is required for gitlab verifier", name)
 		}
 	case "api_key":
 		return validateAPIKeyVerifier(name, v)

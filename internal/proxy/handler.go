@@ -131,6 +131,8 @@ func buildVerifier(vc config.VerifierConfig) (verifier.Verifier, error) {
 		return verifier.NewSlackVerifier(vc.SigningSecret, vc.MaxTimestampAge), nil
 	case "github":
 		return verifier.NewGitHubVerifier(vc.Secret), nil
+	case "gitlab":
+		return verifier.NewGitLabVerifier(vc.Token), nil
 	case "shopify":
 		return verifier.NewShopifyVerifier(vc.Secret), nil
 	case "api_key":
