@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-02-10
+
 ### Added
 - `gitlab` verifier type for GitLab webhook authentication via `X-Gitlab-Token` header
 - `gitlab` predefined IP allowlist for GitLab.com webhook source IPs (`34.74.90.64/28`, `34.74.226.0/24`)
