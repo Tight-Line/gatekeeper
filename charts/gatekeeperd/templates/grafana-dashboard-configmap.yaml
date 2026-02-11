@@ -1,0 +1,22 @@
+{{- if .Values.grafana.dashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gatekeeperd.fullname" . }}-grafana-dashboard
+  {{- if .Values.grafana.dashboard.namespace }}
+  namespace: {{ .Values.grafana.dashboard.namespace }}
+  {{- end }}
+  labels:
+    {{- include "gatekeeperd.labels" . | nindent 4 }}
+    {{ .Values.grafana.dashboard.sidecarLabel }}: "1"
+    {{- with .Values.grafana.dashboard.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.grafana.dashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  gatekeeperd.json: |-
+{{ .Files.Get "dashboards/gatekeeperd.json" | indent 4 }}
+{{- end }}
