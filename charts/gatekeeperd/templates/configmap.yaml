@@ -40,6 +40,8 @@ data:
         {{- if $verifier.maxTimestampAge }}
         max_timestamp_age: {{ $verifier.maxTimestampAge }}
         {{- end }}
+        {{- else if eq $verifier.type "gitlab" }}
+        token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}
         {{- else if eq $verifier.type "github" }}
         secret: ${{ "{" }}{{ $verifier.secretKey }}{{ "}" }}
         {{- else if eq $verifier.type "shopify" }}
