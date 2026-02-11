@@ -1,9 +1,11 @@
 # Docker Compose for local development and testing
 #
 # Usage:
-#   docker-compose up                   # Build and start server only
-#   docker-compose --profile relay up   # Build and start server + relay client
-#   docker-compose down                 # Stop all services
+#   docker-compose up                        # Build and start server only
+#   docker-compose --profile relay up        # Build and start server + relay client
+#   docker-compose -f docker-compose.yml \
+#     -f docker-compose.monitoring.yml up    # Start with Prometheus + Grafana
+#   docker-compose down                      # Stop all services
 #
 # Using pre-built images (PR builds or releases):
 #   GATEKEEPERD_IMAGE=ghcr.io/tight-line/gatekeeperd:pr-123-abc1234 \
