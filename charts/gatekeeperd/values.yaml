@@ -231,6 +231,31 @@ ipAllowlists:
       - "172.16.0.0/12"
       - "192.168.0.0/16"
 
+# ==============================================================================
+# RATE LIMITERS: Protect routes from abuse with token bucket algorithm
+# ==============================================================================
+#
+# Define named rate limiters, then reference them on routes or set a global default.
+# Returns HTTP 429 with Retry-After header when limits are exceeded.
+#
+# Rate limiters support both total (across all IPs) and per-IP limits.
+# The burst parameter controls spike allowance (token bucket capacity).
+rateLimiters: {}
+#  default:
+#    totalRps: 100       # Total requests per second across all IPs
+#    perIpRps: 10        # Requests per second per client IP (0 = disabled)
+#    burst: 20           # Spike allowance (token bucket capacity)
+#    cleanupInterval: 5m # How often to scan for stale per-IP entries (default: 5m)
+#    idleTimeout: 10m    # Remove per-IP limiter after idle time (default: 10m)
+#  strict:
+#    totalRps: 10
+#    perIpRps: 2
+#    burst: 5
+
+# Default rate limiter applied to all routes that don't specify one
+# Must reference a name defined in rateLimiters above
+defaultRateLimiter: ""
+
 # Verifier definitions
 # Secrets should be provided via existingSecret or secrets values
 verifiers: {}
@@ -267,6 +292,7 @@ routes: []
 #    path: /events
 #    ipAllowlist: aws
 #    verifier: avvo-slack
+#    rateLimiter: default  # Optional: reference a rateLimiters entry
 #    destination: http://backend.default.svc.cluster.local:8080/webhooks/slack
 #
 #  # Relay delivery example (for private networks)
