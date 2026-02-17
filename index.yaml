@@ -2,6 +2,25 @@ apiVersion: v1
 entries:
   gatekeeper-relay:
   - apiVersion: v2
+    appVersion: 0.2.8
+    created: "2026-02-17T15:54:24.703957793Z"
+    description: Relay client for gatekeeper that enables webhook delivery to private
+      networks
+    digest: 6a1c791fe0feca6a1b585f17c8e24f738172d2f46291391a97e967af8f6ef67f
+    keywords:
+    - webhook
+    - relay
+    - proxy
+    - private-network
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeper-relay
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.2.8/gatekeeper-relay-0.2.8.tgz
+    version: 0.2.8
+  - apiVersion: v2
     appVersion: 0.2.7
     created: "2026-02-10T15:46:00.866797057Z"
     description: Relay client for gatekeeper that enables webhook delivery to private
@@ -325,6 +344,32 @@ entries:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.1.0/gatekeeper-relay-0.1.0.tgz
     version: 0.1.0
   gatekeeperd:
+  - apiVersion: v2
+    appVersion: 0.2.8
+    created: "2026-02-17T15:54:24.888634109Z"
+    dependencies:
+    - condition: redis.enabled,redis.bundled
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: ~0.9
+    description: Webhook authentication proxy server for validating and forwarding
+      webhooks
+    digest: 84421884a04a4b28113523d8630b553886c65b8661086b8447ff0d399eddb507
+    keywords:
+    - webhook
+    - proxy
+    - authentication
+    - slack
+    - github
+    - relay
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeperd
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.2.8/gatekeeperd-0.2.8.tgz
+    version: 0.2.8
   - apiVersion: v2
     appVersion: 0.2.7
     created: "2026-02-10T15:46:01.148339107Z"
@@ -717,4 +762,4 @@ entries:
     urls:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.1.0/gatekeeperd-0.1.0.tgz
     version: 0.1.0
-generated: "2026-02-10T15:46:01.148506019Z"
+generated: "2026-02-17T15:54:24.888927281Z"
