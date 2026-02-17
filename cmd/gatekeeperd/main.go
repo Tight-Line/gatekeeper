@@ -18,6 +18,7 @@ import (
 	"github.com/tight-line/gatekeeper/internal/ipfilter"
 	"github.com/tight-line/gatekeeper/internal/metrics"
 	"github.com/tight-line/gatekeeper/internal/proxy"
+	"github.com/tight-line/gatekeeper/internal/ratelimit"
 	"github.com/tight-line/gatekeeper/internal/relay"
 	"github.com/tight-line/gatekeeper/internal/server"
 )
@@ -93,6 +94,13 @@ func run() error {
 	}
 	if *debugPayloads {
 		logger.Info("debug payloads enabled - request/response bodies will be logged")
+	}
+
+	// Setup rate limiters if configured
+	rateLimiters := buildRateLimiters(cfg, logger)
+	if rateLimiters != nil {
+		handler.SetRateLimiters(rateLimiters, cfg.Global.DefaultRateLimiter)
+		defer rateLimiters.Stop()
 	}
 
 	// Setup relay manager if any routes use relay tokens
@@ -375,6 +383,37 @@ func runHTTPServer(ctx context.Context, addr string, handler http.Handler, logge
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
 	}
+}
+
+// buildRateLimiters builds the rate limiter set from config
+func buildRateLimiters(cfg *config.Config, logger *slog.Logger) *ratelimit.Set {
+	if len(cfg.RateLimiters) == 0 {
+		return nil
+	}
+
+	limiters := ratelimit.NewSet()
+	for name, rlCfg := range cfg.RateLimiters {
+		limiter := ratelimit.New(name, ratelimit.Config{
+			TotalRPS:        rlCfg.TotalRPS,
+			PerIPRPS:        rlCfg.PerIPRPS,
+			Burst:           rlCfg.Burst,
+			CleanupInterval: rlCfg.CleanupInterval,
+			IdleTimeout:     rlCfg.IdleTimeout,
+		})
+		limiters.Add(name, limiter)
+		logger.Info("rate limiter loaded",
+			"name", name,
+			"total_rps", rlCfg.TotalRPS,
+			"per_ip_rps", rlCfg.PerIPRPS,
+			"burst", rlCfg.Burst,
+		)
+	}
+
+	if cfg.Global.DefaultRateLimiter != "" {
+		logger.Info("global default rate limiter set", "limiter", cfg.Global.DefaultRateLimiter)
+	}
+
+	return limiters
 }
 
 func init() {

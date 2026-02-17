@@ -167,6 +167,30 @@ redis:
   # password: ""  # or use existingSecret
 ```
 
+### Step 5b: Rate Limiting (optional)
+
+Ask: "Do you want to configure rate limiting?"
+
+If yes, collect:
+- **Name** for the rate limiter (e.g., `default`, `strict`)
+- **Total RPS**: Requests per second across all IPs (e.g., 100)
+- **Per-IP RPS**: Requests per second per client IP (0 = disabled)
+- **Burst**: Spike allowance / token bucket capacity (e.g., 20)
+
+Generate:
+```yaml
+rateLimiters:
+  default:
+    totalRps: 100
+    perIpRps: 10
+    burst: 20
+
+# Apply to all routes by default (optional):
+defaultRateLimiter: "default"
+```
+
+Or apply per-route by adding `rateLimiter: default` to individual routes.
+
 ### Step 6: Relay Configuration (if needed)
 
 If any routes use relay mode, generate the gatekeeper-relay values.
@@ -216,6 +240,11 @@ replicaCount: {replica-count}
 # REDIS (required for multi-replica with relay)
 # ------------------------------------------------------------------------------
 {redis-config-if-needed}
+
+# ------------------------------------------------------------------------------
+# RATE LIMITERS (optional)
+# ------------------------------------------------------------------------------
+{rateLimiters-config-if-needed}
 
 # ------------------------------------------------------------------------------
 # IP ALLOWLISTS

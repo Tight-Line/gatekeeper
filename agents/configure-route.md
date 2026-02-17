@@ -84,6 +84,12 @@ Ask about optional configuration:
 - Default: No (destination hostname is used)
 - Enable if: Backend needs to see the original public hostname
 
+**Rate Limiting**: "Do you want to rate limit this route?"
+- Protects against abuse with token bucket algorithm
+- Configure total RPS (across all IPs) and per-IP RPS
+- Returns HTTP 429 with Retry-After header when exceeded
+- Reference a named rate limiter or use the global default
+
 **Payload Validation**: "Do you want to validate the payload structure with JSON Schema?"
 - Optional defense-in-depth against malformed payloads
 - Pre-built schemas available for common providers in `schemas/` directory
@@ -113,6 +119,7 @@ routes:
     ip_allowlist: {recommended-allowlist}  # if applicable
     verifier: {verifier-name}
     validator: {validator-name}            # if applicable
+    rate_limiter: {limiter-name}           # if applicable
     destination: {destination-url}
     preserve_host: {true/false}            # if enabled
 ```
@@ -133,6 +140,7 @@ routes:
     path: {path}
     ip_allowlist: {recommended-allowlist}  # if applicable
     verifier: {verifier-name}
+    rate_limiter: {limiter-name}           # if applicable
     relay_token: "${RELAY_TOKEN_{PROVIDER}}"
 ```
 

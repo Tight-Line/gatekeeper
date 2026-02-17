@@ -37,6 +37,13 @@ ipAllowlists:
     cidrs:
       - "0.0.0.0/0"
 
+# Rate limiter for testing (strict limits to easily trigger 429s with hey)
+rateLimiters:
+  test-strict:
+    totalRps: 5
+    perIpRps: 2
+    burst: 3
+
 # Noop verifier for testing (no signature verification)
 verifiers:
   noop:
@@ -60,11 +67,12 @@ verifiers:
 
 # Routes for testing both direct forwarding and relay delivery
 routes:
-  # Direct forwarding route - forwards directly to httpbin.org
+  # Direct forwarding route - forwards directly to httpbin.org (rate limited)
   - hostname: test.local
     path: /webhook/direct
     ipAllowlist: allow-all
     verifier: noop
+    rateLimiter: test-strict
     destination: https://httpbin.org/post
 
   # Relay route - delivered via gatekeeper-relay client

@@ -21,6 +21,7 @@ import (
 
 	"github.com/tight-line/gatekeeper/internal/config"
 	"github.com/tight-line/gatekeeper/internal/ipfilter"
+	"github.com/tight-line/gatekeeper/internal/ratelimit"
 	"github.com/tight-line/gatekeeper/internal/relay"
 	"github.com/tight-line/gatekeeper/internal/verifier"
 )
@@ -2826,5 +2827,330 @@ func TestHandler_MicrosoftGraphValidation_Relay(t *testing.T) {
 	}
 	if rr.Body.String() != "relay-test-token" {
 		t.Errorf("expected body 'relay-test-token', got %q", rr.Body.String())
+	}
+}
+
+func TestHandler_RateLimiting_NoLimiter(t *testing.T) {
+	// Without rate limiters configured, requests should pass through
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/webhook",
+				Destination: backend.URL,
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+	// No SetRateLimiters call - rate limiting not configured
+
+	// Multiple requests should all succeed
+	for i := 0; i < 10; i++ {
+		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+		req.Host = "test.com"
+		req.RemoteAddr = "127.0.0.1:12345"
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("request %d: expected 200, got %d", i, rr.Code)
+		}
+	}
+}
+
+func TestHandler_RateLimiting_TotalLimit(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/webhook",
+				Destination: backend.URL,
+				RateLimiter: "strict",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	// Create rate limiter set with very strict limits
+	limiters := ratelimit.NewSet()
+	defer limiters.Stop()
+	limiters.Add("strict", ratelimit.New("strict", ratelimit.Config{
+		TotalRPS: 1,
+		PerIPRPS: 0, // Only total limiting
+		Burst:    1,
+	}))
+	handler.SetRateLimiters(limiters, "")
+
+	// First request should succeed
+	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+	req.Host = "test.com"
+	req.RemoteAddr = "127.0.0.1:12345"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("first request: expected 200, got %d", rr.Code)
+	}
+
+	// Second request should be rate limited
+	req = httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+	req.Host = "test.com"
+	req.RemoteAddr = "192.168.1.1:12345" // Different IP, but total limit applies
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Errorf("second request: expected 429, got %d", rr.Code)
+	}
+	if rr.Header().Get("Retry-After") != "1" {
+		t.Errorf("expected Retry-After: 1, got %q", rr.Header().Get("Retry-After"))
+	}
+}
+
+func TestHandler_RateLimiting_PerIPLimit(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/webhook",
+				Destination: backend.URL,
+				RateLimiter: "per-ip",
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	// Burst applies to both total and per-IP equally
+	// With burst=5 and per_ip_rps=1, each IP gets 5 burst requests before hitting the per-IP limit
+	// High total RPS ensures total limit refills fast enough to not be a bottleneck
+	limiters := ratelimit.NewSet()
+	defer limiters.Stop()
+	limiters.Add("per-ip", ratelimit.New("per-ip", ratelimit.Config{
+		TotalRPS: 10000, // Very high total limit (refills quickly)
+		PerIPRPS: 1,     // Low per-IP limit
+		Burst:    5,     // Allow 5 burst requests per IP
+	}))
+	handler.SetRateLimiters(limiters, "")
+
+	// First 5 requests from IP1 should succeed (using burst)
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+		req.Host = "test.com"
+		req.RemoteAddr = "192.168.1.1:12345"
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("IP1 request %d: expected 200, got %d", i+1, rr.Code)
+		}
+	}
+
+	// 6th request from IP1 should be rate limited (burst exhausted)
+	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+	req.Host = "test.com"
+	req.RemoteAddr = "192.168.1.1:12345"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Errorf("IP1 6th request: expected 429, got %d", rr.Code)
+	}
+
+	// First request from IP2 should succeed (different per-IP limiter with its own burst)
+	req = httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+	req.Host = "test.com"
+	req.RemoteAddr = "192.168.1.2:12345"
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("IP2 first request: expected 200, got %d", rr.Code)
+	}
+}
+
+func TestHandler_RateLimiting_GlobalDefault(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/webhook",
+				Destination: backend.URL,
+				// No RateLimiter specified - should use global default
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	limiters := ratelimit.NewSet()
+	defer limiters.Stop()
+	limiters.Add("default", ratelimit.New("default", ratelimit.Config{
+		TotalRPS: 1,
+		Burst:    1,
+	}))
+	handler.SetRateLimiters(limiters, "default") // Set global default
+
+	// First request should succeed
+	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+	req.Host = "test.com"
+	req.RemoteAddr = "127.0.0.1:12345"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("first request: expected 200, got %d", rr.Code)
+	}
+
+	// Second request should be rate limited
+	req = httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+	req.Host = "test.com"
+	req.RemoteAddr = "127.0.0.1:12345"
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Errorf("second request: expected 429, got %d", rr.Code)
+	}
+}
+
+func TestHandler_RateLimiting_RouteOverridesDefault(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/webhook",
+				Destination: backend.URL,
+				RateLimiter: "lenient", // Route-specific limiter
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	limiters := ratelimit.NewSet()
+	defer limiters.Stop()
+	// Strict default that would block after 1 request
+	limiters.Add("default", ratelimit.New("default", ratelimit.Config{
+		TotalRPS: 1,
+		Burst:    1,
+	}))
+	// Lenient route-specific limiter
+	limiters.Add("lenient", ratelimit.New("lenient", ratelimit.Config{
+		TotalRPS: 100,
+		Burst:    10,
+	}))
+	handler.SetRateLimiters(limiters, "default")
+
+	// Multiple requests should succeed (using lenient limiter, not default)
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+		req.Host = "test.com"
+		req.RemoteAddr = "127.0.0.1:12345"
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("request %d: expected 200, got %d", i, rr.Code)
+		}
+	}
+}
+
+func TestHandler_RateLimiting_NoDefaultNoRoute(t *testing.T) {
+	// When no default and no route limiter, rate limiting is skipped
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "test.com",
+				Path:        "/webhook",
+				Destination: backend.URL,
+				// No RateLimiter specified
+			},
+		},
+	}
+
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	limiters := ratelimit.NewSet()
+	defer limiters.Stop()
+	limiters.Add("unused", ratelimit.New("unused", ratelimit.Config{
+		TotalRPS: 1,
+		Burst:    1,
+	}))
+	handler.SetRateLimiters(limiters, "") // No global default
+
+	// Multiple requests should succeed (no limiter applied)
+	for i := 0; i < 10; i++ {
+		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
+		req.Host = "test.com"
+		req.RemoteAddr = "127.0.0.1:12345"
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("request %d: expected 200, got %d", i, rr.Code)
+		}
 	}
 }
