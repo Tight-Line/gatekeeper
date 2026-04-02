@@ -355,8 +355,7 @@ func (m *RedisManager) pollNewMessage(ctx context.Context, key string) (*Webhook
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		// coverage:ignore - timing edge case: block times out before context expires (rare)
-		return nil, nil // Continue polling
+		return nil, nil // coverage:ignore - timing edge case: block times out before context expires (rare)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -461,7 +460,7 @@ func (m *RedisManager) Shutdown() {
 	}
 
 	if m.client != nil {
-		m.client.Close()
+		_ = m.client.Close()
 	}
 }
 

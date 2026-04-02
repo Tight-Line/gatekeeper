@@ -7,6 +7,22 @@ import (
 	"time"
 )
 
+// Test string constants used throughout config_test.go.
+// Defined once to satisfy SonarCloud S1192 (no duplicate string literals).
+const (
+	testExampleHost     = "test.example.com"
+	testWebhookPath     = "/webhook"
+	testBackendURL      = "http://backend:8080"
+	errFmtUnexpected    = "unexpected error: %v"
+	testSecret          = "my-secret"
+	testGoogTokenHeader = "X-Goog-Channel-Token"
+	testHostA           = "a.example.com"
+	testURLa            = "http://a"
+	testHostB           = "b.example.com"
+	testHostC           = "c.example.com"
+	testNonexistentFile = "/nonexistent/file.yaml"
+)
+
 func TestLoad(t *testing.T) {
 	// Set up test env vars
 	os.Setenv("TEST_SECRET", "my-secret-value")
@@ -70,7 +86,7 @@ routes:
 	if len(cfg.Routes) != 1 {
 		t.Fatalf("expected 1 route, got %d", len(cfg.Routes))
 	}
-	if cfg.Routes[0].Hostname != "test.example.com" {
+	if cfg.Routes[0].Hostname != testExampleHost {
 		t.Errorf("expected hostname=test.example.com, got %s", cfg.Routes[0].Hostname)
 	}
 }
@@ -79,8 +95,8 @@ func TestValidate_RouteRequiresHostname(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 			},
 		},
 	}
@@ -95,8 +111,8 @@ func TestValidate_RouteRequiresPath(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Destination: testBackendURL,
 			},
 		},
 	}
@@ -111,8 +127,8 @@ func TestValidate_RouteRequiresDestination(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname: "test.example.com",
-				Path:     "/webhook",
+				Hostname: testExampleHost,
+				Path:     testWebhookPath,
 			},
 		},
 	}
@@ -127,9 +143,9 @@ func TestValidate_RouteReferencesInvalidIPAllowlist(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 				IPAllowlist: "nonexistent",
 			},
 		},
@@ -145,9 +161,9 @@ func TestValidate_RouteReferencesInvalidVerifier(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 				Verifier:    "nonexistent",
 			},
 		},
@@ -246,7 +262,7 @@ func TestValidate_ValidConfig(t *testing.T) {
 	cfg := &Config{
 		IPAllowlists: map[string]IPAllowlist{
 			"static": {
-				CIDRs: []string{"10.0.0.0/8"},
+				CIDRs: []string{testCIDRPrivate8},
 			},
 			"dynamic": {
 				FetchURL:        "https://example.com/ips.json",
@@ -278,11 +294,11 @@ func TestValidate_ValidConfig(t *testing.T) {
 		},
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
 				IPAllowlist: "static",
 				Verifier:    "slack",
-				Destination: "http://backend:8080",
+				Destination: testBackendURL,
 			},
 		},
 	}
@@ -296,10 +312,10 @@ func TestValidate_ValidConfig(t *testing.T) {
 func TestGetHostnames(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
-			{Hostname: "a.example.com", Path: "/1", Destination: "http://a"},
-			{Hostname: "b.example.com", Path: "/2", Destination: "http://b"},
-			{Hostname: "a.example.com", Path: "/3", Destination: "http://a"}, // duplicate
-			{Hostname: "c.example.com", Path: "/4", Destination: "http://c"},
+			{Hostname: testHostA, Path: "/1", Destination: testURLa},
+			{Hostname: testHostB, Path: "/2", Destination: "http://b"},
+			{Hostname: testHostA, Path: "/3", Destination: testURLa}, // duplicate
+			{Hostname: testHostC, Path: "/4", Destination: "http://c"},
 		},
 	}
 
@@ -309,9 +325,9 @@ func TestGetHostnames(t *testing.T) {
 	}
 
 	expected := map[string]bool{
-		"a.example.com": true,
-		"b.example.com": true,
-		"c.example.com": true,
+		testHostA: true,
+		testHostB: true,
+		testHostC: true,
 	}
 	for _, h := range hostnames {
 		if !expected[h] {
@@ -347,7 +363,7 @@ func TestLoadFromEnv(t *testing.T) {
 	os.Unsetenv("GATEKEEPERD_CONFIG")
 	cfg, err := LoadFromEnv()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 	if cfg != nil {
 		t.Error("expected nil config when env var not set")
@@ -365,7 +381,7 @@ routes:
 
 	cfg, err = LoadFromEnv()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 	if cfg == nil {
 		t.Fatal("expected config to be loaded")
@@ -395,9 +411,9 @@ routes:
 	os.Setenv("GATEKEEPERD_CONFIG", validConfig)
 	defer os.Unsetenv("GATEKEEPERD_CONFIG")
 
-	cfg, err := LoadAuto("/nonexistent/file.yaml")
+	cfg, err := LoadAuto(testNonexistentFile)
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 	if cfg == nil {
 		t.Fatal("expected config to be loaded from env var")
@@ -421,7 +437,7 @@ routes:
 
 	cfg, err := LoadAuto(configPath)
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 	if cfg == nil {
 		t.Fatal("expected config to be loaded from file")
@@ -431,9 +447,9 @@ routes:
 func TestGetRelayTokens(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
-			{Hostname: "a.example.com", Path: "/1", Destination: "http://a"},
-			{Hostname: "b.example.com", Path: "/2", RelayToken: "token1"},
-			{Hostname: "c.example.com", Path: "/3", RelayToken: "token2"},
+			{Hostname: testHostA, Path: "/1", Destination: testURLa},
+			{Hostname: testHostB, Path: "/2", RelayToken: "token1"},
+			{Hostname: testHostC, Path: "/3", RelayToken: "token2"},
 			{Hostname: "d.example.com", Path: "/4", RelayToken: "token1"}, // duplicate
 		},
 	}
@@ -458,8 +474,8 @@ func TestValidate_RouteWithRelayToken(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname:   "test.example.com",
-				Path:       "/webhook",
+				Hostname:   testExampleHost,
+				Path:       testWebhookPath,
 				RelayToken: "my-token",
 			},
 		},
@@ -475,9 +491,9 @@ func TestValidate_RouteBothDestinationAndRelayToken(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 				RelayToken:  "my-token",
 			},
 		},
@@ -579,7 +595,7 @@ func TestValidate_ValidHMACVerifier(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -595,7 +611,7 @@ func TestValidate_ValidShopifyVerifier(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -619,7 +635,7 @@ func TestLoadAuto_EnvVarError(t *testing.T) {
 	os.Setenv("GATEKEEPERD_CONFIG", "invalid: yaml: content:")
 	defer os.Unsetenv("GATEKEEPERD_CONFIG")
 
-	_, err := LoadAuto("/nonexistent/file.yaml")
+	_, err := LoadAuto(testNonexistentFile)
 	if err == nil {
 		t.Error("expected error from invalid env var config")
 	}
@@ -629,7 +645,7 @@ func TestLoadAuto_FileNotFound(t *testing.T) {
 	// Ensure env var is not set
 	os.Unsetenv("GATEKEEPERD_CONFIG")
 
-	_, err := LoadAuto("/nonexistent/file.yaml")
+	_, err := LoadAuto(testNonexistentFile)
 	if err == nil {
 		t.Error("expected error for nonexistent file")
 	}
@@ -673,9 +689,9 @@ func TestValidate_RouteReferencesInvalidValidator(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 				Validator:   "nonexistent",
 			},
 		},
@@ -745,7 +761,7 @@ func TestValidate_ValidJSONSchemaValidator_WithSchemaFile(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -761,7 +777,7 @@ func TestValidate_ValidJSONSchemaValidator_WithInlineSchema(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -775,9 +791,9 @@ func TestValidate_RouteWithValidator(t *testing.T) {
 		},
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 				Validator:   "my-validator",
 			},
 		},
@@ -785,7 +801,7 @@ func TestValidate_RouteWithValidator(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -836,7 +852,7 @@ func TestValidate_ValidJSONFieldVerifier(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -880,14 +896,14 @@ func TestValidate_ValidQueryParamVerifier(t *testing.T) {
 			"test": {
 				Type:  "query_param",
 				Name:  "token",
-				Token: "my-secret",
+				Token: testSecret,
 			},
 		},
 	}
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -897,7 +913,7 @@ func TestValidate_HeaderQueryParamVerifier_MissingHeader(t *testing.T) {
 			"test": {
 				Type:  "header_query_param",
 				Name:  "secret",
-				Token: "my-secret",
+				Token: testSecret,
 				// Header is missing
 			},
 		},
@@ -914,8 +930,8 @@ func TestValidate_HeaderQueryParamVerifier_MissingName(t *testing.T) {
 		Verifiers: map[string]VerifierConfig{
 			"test": {
 				Type:   "header_query_param",
-				Header: "X-Goog-Channel-Token",
-				Token:  "my-secret",
+				Header: testGoogTokenHeader,
+				Token:  testSecret,
 				// Name is missing
 			},
 		},
@@ -932,7 +948,7 @@ func TestValidate_HeaderQueryParamVerifier_MissingToken(t *testing.T) {
 		Verifiers: map[string]VerifierConfig{
 			"test": {
 				Type:   "header_query_param",
-				Header: "X-Goog-Channel-Token",
+				Header: testGoogTokenHeader,
 				Name:   "secret",
 				// Token is missing
 			},
@@ -950,16 +966,16 @@ func TestValidate_ValidHeaderQueryParamVerifier(t *testing.T) {
 		Verifiers: map[string]VerifierConfig{
 			"test": {
 				Type:   "header_query_param",
-				Header: "X-Goog-Channel-Token",
+				Header: testGoogTokenHeader,
 				Name:   "secret",
-				Token:  "my-secret",
+				Token:  testSecret,
 			},
 		},
 	}
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -1040,7 +1056,7 @@ func TestValidate_ValidRateLimiter(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -1065,9 +1081,9 @@ func TestValidate_RouteReferencesInvalidRateLimiter(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 				RateLimiter: "nonexistent",
 			},
 		},
@@ -1090,9 +1106,9 @@ func TestValidate_RouteWithValidRateLimiter(t *testing.T) {
 		},
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 				RateLimiter: "default",
 			},
 		},
@@ -1100,7 +1116,7 @@ func TestValidate_RouteWithValidRateLimiter(t *testing.T) {
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
 
@@ -1111,9 +1127,9 @@ func TestValidate_GlobalDefaultRateLimiter_NotFound(t *testing.T) {
 		},
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 			},
 		},
 	}
@@ -1138,15 +1154,15 @@ func TestValidate_GlobalDefaultRateLimiter_Valid(t *testing.T) {
 		},
 		Routes: []RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				Destination: "http://backend:8080",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 			},
 		},
 	}
 
 	err := cfg.Validate()
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf(errFmtUnexpected, err)
 	}
 }
