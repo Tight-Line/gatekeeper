@@ -54,7 +54,7 @@ type RateLimiterConfig struct {
 
 // VerifierConfig defines a webhook signature verifier
 type VerifierConfig struct {
-	Type string `yaml:"type"` // slack, github, gitlab, shopify, api_key, hmac, json_field, query_param, header_query_param, noop
+	Type string `yaml:"type"` // slack, github, gitlab, shopify, api_key, hmac, json_field, query_param, header_query_param, oidc, noop
 
 	// For slack verifier
 	SigningSecret   string        `yaml:"signing_secret,omitempty"`
@@ -76,6 +76,12 @@ type VerifierConfig struct {
 
 	// For query_param and header_query_param verifiers
 	Name string `yaml:"name,omitempty"` // query parameter name or key name within header
+
+	// For oidc verifier
+	Issuer   string            `yaml:"issuer,omitempty"`
+	Audience string            `yaml:"audience,omitempty"`
+	JWKSUri  string            `yaml:"jwks_uri,omitempty"`
+	Claims   map[string]string `yaml:"claims,omitempty"`
 }
 
 // ValidatorConfig defines a payload structure validator
@@ -269,6 +275,8 @@ func validateVerifier(name string, v VerifierConfig) error {
 		return validateQueryParamVerifier(name, v)
 	case "header_query_param":
 		return validateHeaderQueryParamVerifier(name, v)
+	case "oidc":
+		return validateOIDCVerifier(name, v)
 	case "noop":
 		// No validation needed
 	case "":
@@ -325,6 +333,17 @@ func validateQueryParamVerifier(name string, v VerifierConfig) error {
 	}
 	if v.Token == "" {
 		return fmt.Errorf("verifier %q: token is required for query_param verifier", name)
+	}
+	return nil
+}
+
+// validateOIDCVerifier validates oidc verifier config
+func validateOIDCVerifier(name string, v VerifierConfig) error {
+	if v.Issuer == "" {
+		return fmt.Errorf("verifier %q: issuer is required for oidc verifier", name)
+	}
+	if v.Audience == "" {
+		return fmt.Errorf("verifier %q: audience is required for oidc verifier", name)
 	}
 	return nil
 }

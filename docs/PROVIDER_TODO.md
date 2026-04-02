@@ -11,6 +11,7 @@ Webhook providers we want to support in the future. Contributions welcome.
 | GitLab | DevOps | `gitlab` |
 | Shopify | E-commerce | `shopify` |
 | Google Calendar | Productivity | `api_key` |
+| Google Chat | Communication | `oidc` |
 | Generic HMAC | Any | `hmac` |
 | Generic API Key | Any | `api_key` |
 
@@ -52,7 +53,7 @@ Less common or requiring complex verification schemes.
 | PayPal | Payments | Certificate-based | Requires fetching PayPal certs |
 | Salesforce | CRM | Org-specific | Complex org validation |
 | AWS SNS | Cloud | Certificate-based | X.509 signature verification |
-| Azure Event Grid | Cloud | SAS token or AAD | Multiple auth schemes |
+| Azure Event Grid | Cloud | SAS token or AAD (`oidc`) | AAD mode supported via oidc verifier; SAS token not yet implemented |
 | Okta | Identity | HMAC-SHA256 | [link](https://developer.okta.com/docs/concepts/event-hooks/) |
 | Auth0 | Identity | HMAC-SHA256 | [link](https://auth0.com/docs/customize/hooks) |
 | Zoom | Communication | HMAC-SHA256 | [link](https://developers.zoom.us/docs/api/rest/webhook-reference/) |

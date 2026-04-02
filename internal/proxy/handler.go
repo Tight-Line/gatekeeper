@@ -145,6 +145,8 @@ func buildVerifier(vc config.VerifierConfig) (verifier.Verifier, error) {
 		return verifier.NewQueryParamVerifier(vc.Name, vc.Token), nil
 	case "header_query_param":
 		return verifier.NewHeaderQueryParamVerifier(vc.Header, vc.Name, vc.Token), nil
+	case "oidc":
+		return verifier.NewOIDCVerifier(vc.Issuer, vc.Audience, vc.JWKSUri, vc.Claims), nil
 	case "noop":
 		return verifier.NewNoopVerifier(), nil
 	default:
@@ -722,6 +724,14 @@ func categorizeVerificationError(err error) string {
 		return "timestamp_expired"
 	case errors.Is(err, verifier.ErrTokenMismatch):
 		return "token_mismatch"
+	case errors.Is(err, verifier.ErrTokenMissing):
+		return "token_missing"
+	case errors.Is(err, verifier.ErrTokenExpired):
+		return "token_expired"
+	case errors.Is(err, verifier.ErrTokenInvalid):
+		return "token_invalid"
+	case errors.Is(err, verifier.ErrClaimMismatch):
+		return "claim_mismatch"
 	default:
 		return "unknown"
 	}

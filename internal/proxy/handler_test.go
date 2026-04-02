@@ -1794,6 +1794,26 @@ func TestCategorizeVerificationError(t *testing.T) {
 			expected: "token_mismatch",
 		},
 		{
+			name:     "token missing",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTokenMissing),
+			expected: "token_missing",
+		},
+		{
+			name:     "token expired",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTokenExpired),
+			expected: "token_expired",
+		},
+		{
+			name:     "token invalid",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTokenInvalid),
+			expected: "token_invalid",
+		},
+		{
+			name:     "claim mismatch",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrClaimMismatch),
+			expected: "claim_mismatch",
+		},
+		{
 			name:     "unknown error",
 			err:      fmt.Errorf("some random error"),
 			expected: "unknown",
@@ -3215,5 +3235,33 @@ func TestHandler_RateLimiting_NoDefaultNoRoute(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Errorf(errFmtRequest200, i, rr.Code)
 		}
+	}
+}
+
+func TestNewHandler_OIDCVerifier(t *testing.T) {
+	cfg := &config.Config{
+		Verifiers: map[string]config.VerifierConfig{
+			"test-oidc": {
+				Type:     "oidc",
+				Issuer:   "https://accounts.example.com",
+				Audience: "myapp",
+			},
+		},
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "example.com",
+				Path:        "/hook",
+				Verifier:    "test-oidc",
+				Destination: "http://backend:8080",
+			},
+		},
+	}
+	filters := ipfilter.NewFilterSet()
+	h, err := NewHandler(cfg, filters, slog.Default(), HandlerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error building handler with oidc verifier: %v", err)
+	}
+	if h == nil {
+		t.Fatal("expected non-nil handler")
 	}
 }

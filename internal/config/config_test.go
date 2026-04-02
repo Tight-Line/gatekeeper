@@ -1166,3 +1166,52 @@ func TestValidate_GlobalDefaultRateLimiter_Valid(t *testing.T) {
 		t.Errorf(errFmtUnexpected, err)
 	}
 }
+
+func TestValidate_OIDCVerifierMissingIssuer(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:     "oidc",
+				Audience: "myapp",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for oidc verifier without issuer")
+	}
+}
+
+func TestValidate_OIDCVerifierMissingAudience(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:   "oidc",
+				Issuer: "https://accounts.example.com",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for oidc verifier without audience")
+	}
+}
+
+func TestValidate_ValidOIDCVerifier(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type:     "oidc",
+				Issuer:   "https://accounts.example.com",
+				Audience: "myapp",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err != nil {
+		t.Errorf(errFmtUnexpected, err)
+	}
+}
