@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-04-09
+
 ### Added
 - `oidc` verifier type for OIDC JWT bearer token authentication. Supports any OIDC-compliant identity provider (Google, Azure AD, etc.) via issuer discovery or explicit JWKS URI configuration. Handles both standard JWK Set format and Google X.509 certificate map format. Configurable audience, required claims, and automatic key caching with refresh.
 
