@@ -64,6 +64,18 @@ data:
         header: {{ $verifier.header | quote }}
         name: {{ $verifier.name | quote }}
         token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}
+        {{- else if eq $verifier.type "oidc" }}
+        issuer: {{ $verifier.issuer | quote }}
+        audience: {{ $verifier.audience | quote }}
+        {{- if $verifier.jwksUri }}
+        jwks_uri: {{ $verifier.jwksUri | quote }}
+        {{- end }}
+        {{- if $verifier.claims }}
+        claims:
+          {{- range $k, $v := $verifier.claims }}
+          {{ $k }}: {{ $v | quote }}
+          {{- end }}
+        {{- end }}
         {{- end }}
       {{- end }}
 

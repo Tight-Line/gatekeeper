@@ -5,6 +5,8 @@ bin/
 test-values-gatekeeperd.yaml
 test-values-relay.yaml
 coverage.out
+coverage.html
+coverage*.out
 
 # Ephemeral planning docs
 PLAN.md

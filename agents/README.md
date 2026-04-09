@@ -31,8 +31,8 @@ Each skill file contains:
 These skills are symlinked from `.claude/skills/` for Claude Code slash command support:
 
 ```
-.claude/skills/configure-route.md -> ../../agents/configure-route.md
-.claude/skills/configure-helm.md -> ../../agents/configure-helm.md
+.claude/skills/configure-route/SKILL.md -> ../../../agents/configure-route.md
+.claude/skills/configure-helm/SKILL.md -> ../../../agents/configure-helm.md
 ```
 
 The canonical versions live here in `agents/` and are tracked in version control.

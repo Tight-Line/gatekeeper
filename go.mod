@@ -1,8 +1,6 @@
 module github.com/tight-line/gatekeeper
 
-go 1.25.0
-
-toolchain go1.25.1
+go 1.25.6
 
 require (
 	github.com/alicebob/miniredis/v2 v2.36.0

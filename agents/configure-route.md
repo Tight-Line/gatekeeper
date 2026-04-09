@@ -1,3 +1,8 @@
+---
+name: configure-route
+description: Interactively configure a new webhook route for gatekeeper
+---
+
 # Configure Route Skill
 
 This skill walks users through configuring a new webhook route for gatekeeper.

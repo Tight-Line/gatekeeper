@@ -12,6 +12,10 @@ var (
 	ErrTimestampInvalid  = errors.New("timestamp is invalid")
 	ErrTimestampExpired  = errors.New("timestamp is too old")
 	ErrTokenMismatch     = errors.New("token does not match")
+	ErrTokenMissing      = errors.New("bearer token missing")
+	ErrTokenExpired      = errors.New("token is expired")
+	ErrTokenInvalid      = errors.New("token is invalid")
+	ErrClaimMismatch     = errors.New("required claim does not match")
 )
 
 // Verifier verifies incoming webhook requests

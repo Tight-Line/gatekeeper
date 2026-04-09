@@ -1,6 +1,8 @@
 # golangci-lint configuration
 # https://golangci-lint.run/usage/configuration/
 
+version: "2"
+
 run:
   timeout: 5m
   tests: true
@@ -8,40 +10,54 @@ run:
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - unparam
     - gocritic
+  settings:
+    misspell:
+      locale: US
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam        # Allow passing large structs by value
+        - rangeValCopy     # Allow copying in range loops
+        - octalLiteral     # 0644 vs 0o644 is a style preference
+        - emptyStringTest  # len(s) == 0 vs s == "" is a style preference
+        - deprecatedComment # Strict comment formatting is optional
+        - httpNoBody       # nil vs http.NoBody is a style preference in tests
+  exclusions:
+    rules:
+      # Test files: relax errcheck (os.Setenv/Unsetenv and Close errors are
+      # benign in tests) and unparam (unused params in goroutines are common)
+      - path: "_test\\.go"
+        linters:
+          - unparam
+          - errcheck
+      # Deferred Close() calls on HTTP response bodies and connections are
+      # conventionally not checked; errors are not actionable in a defer
+      - source: "defer (resp|pubsub|client|m\\.client|httpResp)\\..*Close"
+        linters:
+          - errcheck
 
-linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: github.com/tight-line/gatekeeper
-  misspell:
-    locale: US
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - hugeParam  # Allow passing large structs by value
-      - rangeValCopy  # Allow copying in range loops
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/tight-line/gatekeeper
 
 issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - unparam
-        - gocritic
   max-issues-per-linter: 0
   max-same-issues: 0

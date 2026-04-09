@@ -26,6 +26,60 @@ import (
 	"github.com/tight-line/gatekeeper/internal/verifier"
 )
 
+// Test string constants used throughout handler_test.go.
+// Defined once to satisfy SonarCloud S1192 (no duplicate string literals).
+const (
+	testExampleHost          = "test.example.com"
+	testWebhookPath          = "/webhook"
+	testIPFilterName         = "test-ips"
+	testNoVerifyHost         = "noverify.example.com"
+	testSecret               = "test-secret"
+	errFmtHandler            = "failed to create handler: %v"
+	testLoopbackAddr         = "127.0.0.1:12345"
+	testSlackTimestampHeader = "X-Slack-Request-Timestamp"
+	testSlackSigHeader       = "X-Slack-Signature"
+	testSlackSigFmt          = "v0:%s:%s"
+	errFmtStatusBody         = "expected status %d, got %d (body: %s)"
+	testExampleWebhookHTTPS  = "https://test.example.com/webhook"
+	testPrivateAddr          = "192.168.1.100:12345" // NOSONAR - test fixture: RFC 1918 private IP with port
+	testHeaderContentType    = "Content-Type"
+	testContentTypeJSON      = "application/json"
+	testCustomHeader         = "X-Custom-Header"
+	errFmtStatus200          = "expected status 200, got %d"
+	testHeaderXFF            = "X-Forwarded-For"
+	testExampleWebhookHTTP   = "http://test.example.com/webhook"
+	testHooksPath            = "/hooks"
+	testEventPush            = "event=push"
+	testTokenSecret          = "token=secret"
+	testHooksPrefix          = "/hooks/"
+	testHooksGithub          = "/hooks/github"
+	testBackendURL           = "http://backend"
+	testHost                 = "test.com"
+	testToken                = "test-token"
+	testWebhookURL           = "https://test.com/webhook"
+	errFmtStatus500          = "expected status 500, got %d"
+	errFmtStatus502          = "expected status 502, got %d"
+	testCustomHeaderShort    = "X-Custom"
+	errFmtStatusD            = "expected status %d, got %d"
+	testTruncated            = "... (truncated)"
+	testSlackWebhookPath     = "/slack-webhook"
+	testNoVerifierPath       = "/no-verifier"
+	testSlackVerifierName    = "my-slack"
+	testGithubVerifierName   = "my-github"
+	testShopifyVerifierName  = "my-shopify"
+	testNoopVerifierName     = "my-noop"
+	testGitlabVerifierName   = "my-gitlab"
+	testHeaderContentLength  = "Content-Length"
+	testGraphWebhookPath     = "/graph-webhook"
+	testMSGraphVerifierName  = "ms-graph"
+	errFmtRequest200         = "request %d: expected 200, got %d"
+	testPerIPMode            = "per-ip"
+	testBaseURL              = "https://test.com"
+	testPort                 = ":12345"
+	testWebhooksHost         = "webhooks.example.com"
+	errFmtWrapped            = "wrapped: %w"
+)
+
 func TestHandler_ServeHTTP(t *testing.T) {
 	// Create a test backend that echoes the request
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,40 +94,40 @@ func TestHandler_ServeHTTP(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
-				IPAllowlist: "test-ips",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
+				IPAllowlist: testIPFilterName,
 				Verifier:    "test-slack",
 				Destination: backend.URL,
 			},
 			{
-				Hostname:    "noverify.example.com",
-				Path:        "/webhook",
-				IPAllowlist: "test-ips",
+				Hostname:    testNoVerifyHost,
+				Path:        testWebhookPath,
+				IPAllowlist: testIPFilterName,
 				Destination: backend.URL,
 			},
 		},
 		Verifiers: map[string]config.VerifierConfig{
 			"test-slack": {
 				Type:          "slack",
-				SigningSecret: "test-secret",
+				SigningSecret: testSecret,
 			},
 		},
 	}
 
 	// Build IP filters
 	filters := ipfilter.NewFilterSet()
-	filter, err := ipfilter.NewFilter("test-ips", []string{"127.0.0.0/8", "192.168.0.0/16"})
+	filter, err := ipfilter.NewFilter(testIPFilterName, []string{testCIDRLoopback, testCIDRPrivate16})
 	if err != nil {
 		t.Fatalf("failed to create filter: %v", err)
 	}
-	filters.Add("test-ips", filter)
+	filters.Add(testIPFilterName, filter)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	tests := []struct {
@@ -88,69 +142,69 @@ func TestHandler_ServeHTTP(t *testing.T) {
 		{
 			name:           "no matching route",
 			hostname:       "unknown.example.com",
-			path:           "/webhook",
-			remoteAddr:     "127.0.0.1:12345",
+			path:           testWebhookPath,
+			remoteAddr:     testLoopbackAddr,
 			body:           []byte(`{"test":"data"}`),
 			expectedStatus: http.StatusNotFound,
 		},
 		{
 			name:           "ip not allowed",
-			hostname:       "test.example.com",
-			path:           "/webhook",
-			remoteAddr:     "8.8.8.8:12345",
+			hostname:       testExampleHost,
+			path:           testWebhookPath,
+			remoteAddr:     testPublicIP + testPort,
 			body:           []byte(`{"test":"data"}`),
 			expectedStatus: http.StatusForbidden,
 		},
 		{
 			name:           "missing signature",
-			hostname:       "test.example.com",
-			path:           "/webhook",
-			remoteAddr:     "127.0.0.1:12345",
+			hostname:       testExampleHost,
+			path:           testWebhookPath,
+			remoteAddr:     testLoopbackAddr,
 			body:           []byte(`{"test":"data"}`),
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "invalid signature",
-			hostname:   "test.example.com",
-			path:       "/webhook",
-			remoteAddr: "127.0.0.1:12345",
+			hostname:   testExampleHost,
+			path:       testWebhookPath,
+			remoteAddr: testLoopbackAddr,
 			body:       []byte(`{"test":"data"}`),
 			setupHeaders: func(r *http.Request, body []byte) {
-				r.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(time.Now().Unix(), 10))
-				r.Header.Set("X-Slack-Signature", "v0=invalid")
+				r.Header.Set(testSlackTimestampHeader, strconv.FormatInt(time.Now().Unix(), 10))
+				r.Header.Set(testSlackSigHeader, "v0=invalid")
 			},
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "valid slack request",
-			hostname:   "test.example.com",
-			path:       "/webhook",
-			remoteAddr: "127.0.0.1:12345",
+			hostname:   testExampleHost,
+			path:       testWebhookPath,
+			remoteAddr: testLoopbackAddr,
 			body:       []byte(`{"test":"data"}`),
 			setupHeaders: func(r *http.Request, body []byte) {
 				timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-				sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
-				mac := hmac.New(sha256.New, []byte("test-secret"))
+				sigBase := fmt.Sprintf(testSlackSigFmt, timestamp, string(body))
+				mac := hmac.New(sha256.New, []byte(testSecret))
 				mac.Write([]byte(sigBase))
 				signature := "v0=" + hex.EncodeToString(mac.Sum(nil))
-				r.Header.Set("X-Slack-Request-Timestamp", timestamp)
-				r.Header.Set("X-Slack-Signature", signature)
+				r.Header.Set(testSlackTimestampHeader, timestamp)
+				r.Header.Set(testSlackSigHeader, signature)
 			},
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "route without verifier",
-			hostname:       "noverify.example.com",
-			path:           "/webhook",
-			remoteAddr:     "127.0.0.1:12345",
+			hostname:       testNoVerifyHost,
+			path:           testWebhookPath,
+			remoteAddr:     testLoopbackAddr,
 			body:           []byte(`{"test":"data"}`),
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "prefix path matching",
-			hostname:       "noverify.example.com",
+			hostname:       testNoVerifyHost,
 			path:           "/webhook/subpath",
-			remoteAddr:     "127.0.0.1:12345",
+			remoteAddr:     testLoopbackAddr,
 			body:           []byte(`{"test":"data"}`),
 			expectedStatus: http.StatusOK,
 		},
@@ -170,7 +224,7 @@ func TestHandler_ServeHTTP(t *testing.T) {
 			handler.ServeHTTP(rr, req)
 
 			if rr.Code != tt.expectedStatus {
-				t.Errorf("expected status %d, got %d (body: %s)", tt.expectedStatus, rr.Code, rr.Body.String())
+				t.Errorf(errFmtStatusBody, tt.expectedStatus, rr.Code, rr.Body.String())
 			}
 		})
 	}
@@ -188,8 +242,8 @@ func TestHandler_ForwardHeaders(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 			},
 		},
@@ -200,38 +254,38 @@ func TestHandler_ForwardHeaders(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	body := []byte(`{"test":"data"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.example.com/webhook", bytes.NewReader(body))
-	req.Host = "test.example.com"
-	req.RemoteAddr = "192.168.1.100:12345"
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Custom-Header", "custom-value")
+	req := httptest.NewRequest(http.MethodPost, testExampleWebhookHTTPS, bytes.NewReader(body))
+	req.Host = testExampleHost
+	req.RemoteAddr = testPrivateIP + testPort
+	req.Header.Set(testHeaderContentType, testContentTypeJSON)
+	req.Header.Set(testCustomHeader, "custom-value")
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+		t.Fatalf(errFmtStatus200, rr.Code)
 	}
 
 	// Check X-Forwarded headers were added (ReverseProxy may append its own)
-	xff := capturedHeaders.Get("X-Forwarded-For")
-	if xff == "" || xff != "192.168.1.100" && !strings.HasPrefix(xff, "192.168.1.100,") {
-		t.Errorf("expected X-Forwarded-For to start with 192.168.1.100, got %s", xff)
+	xff := capturedHeaders.Get(testHeaderXFF)
+	if xff == "" || xff != testPrivateIP && !strings.HasPrefix(xff, testPrivateIP+",") {
+		t.Errorf("expected X-Forwarded-For to start with %s, got %s", testPrivateIP, xff)
 	}
-	if capturedHeaders.Get("X-Forwarded-Host") != "test.example.com" {
+	if capturedHeaders.Get("X-Forwarded-Host") != testExampleHost {
 		t.Errorf("expected X-Forwarded-Host=test.example.com, got %s", capturedHeaders.Get("X-Forwarded-Host"))
 	}
 
 	// Check original headers are preserved
-	if capturedHeaders.Get("Content-Type") != "application/json" {
-		t.Errorf("expected Content-Type=application/json, got %s", capturedHeaders.Get("Content-Type"))
+	if capturedHeaders.Get(testHeaderContentType) != testContentTypeJSON {
+		t.Errorf("expected Content-Type=application/json, got %s", capturedHeaders.Get(testHeaderContentType))
 	}
-	if capturedHeaders.Get("X-Custom-Header") != "custom-value" {
-		t.Errorf("expected X-Custom-Header=custom-value, got %s", capturedHeaders.Get("X-Custom-Header"))
+	if capturedHeaders.Get(testCustomHeader) != "custom-value" {
+		t.Errorf("expected X-Custom-Header=custom-value, got %s", capturedHeaders.Get(testCustomHeader))
 	}
 }
 
@@ -247,8 +301,8 @@ func TestHandler_ForwardHeaders_XFFChain(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 			},
 		},
@@ -259,22 +313,22 @@ func TestHandler_ForwardHeaders_XFFChain(t *testing.T) {
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 	body := []byte(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "http://test.example.com/webhook", bytes.NewReader(body))
-	req.Host = "test.example.com"
-	req.RemoteAddr = "10.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testExampleWebhookHTTP, bytes.NewReader(body))
+	req.Host = testExampleHost
+	req.RemoteAddr = testPrivate10IP + testPort
 	// Simulate request already passed through upstream proxy
-	req.Header.Set("X-Forwarded-For", "203.0.113.50, 198.51.100.25")
+	req.Header.Set(testHeaderXFF, testDocIP1+", "+testDocIP2)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+		t.Fatalf(errFmtStatus200, rr.Code)
 	}
 
 	// httputil.ReverseProxy appends to existing X-Forwarded-For chain
-	xff := capturedHeaders.Get("X-Forwarded-For")
-	expected := "203.0.113.50, 198.51.100.25, 10.0.0.1"
+	xff := capturedHeaders.Get(testHeaderXFF)
+	expected := testDocIP1 + ", " + testDocIP2 + ", " + testPrivate10IP
 	if xff != expected {
 		t.Errorf("expected X-Forwarded-For=%q, got %q", expected, xff)
 	}
@@ -325,8 +379,8 @@ func TestHandler_ForwardHeaders_ProtoDetection(t *testing.T) {
 			cfg := &config.Config{
 				Routes: []config.RouteConfig{
 					{
-						Hostname:    "test.example.com",
-						Path:        "/webhook",
+						Hostname:    testExampleHost,
+						Path:        testWebhookPath,
 						Destination: backend.URL,
 					},
 				},
@@ -337,9 +391,9 @@ func TestHandler_ForwardHeaders_ProtoDetection(t *testing.T) {
 			handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 			body := []byte(`{}`)
-			req := httptest.NewRequest(http.MethodPost, "http://test.example.com/webhook", bytes.NewReader(body))
-			req.Host = "test.example.com"
-			req.RemoteAddr = "127.0.0.1:12345"
+			req := httptest.NewRequest(http.MethodPost, testExampleWebhookHTTP, bytes.NewReader(body))
+			req.Host = testExampleHost
+			req.RemoteAddr = testLoopbackAddr
 
 			if tc.useTLS {
 				req.TLS = &tls.ConnectionState{}
@@ -352,7 +406,7 @@ func TestHandler_ForwardHeaders_ProtoDetection(t *testing.T) {
 			handler.ServeHTTP(rr, req)
 
 			if rr.Code != http.StatusOK {
-				t.Fatalf("expected status 200, got %d", rr.Code)
+				t.Fatalf(errFmtStatus200, rr.Code)
 			}
 
 			proto := capturedHeaders.Get("X-Forwarded-Proto")
@@ -377,8 +431,8 @@ func TestHandler_PrefixRoutePreservesPathSuffix(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/hooks",
+				Hostname:    testExampleHost,
+				Path:        testHooksPath,
 				Destination: backend.URL + "/api/webhooks",
 			},
 		},
@@ -389,19 +443,19 @@ func TestHandler_PrefixRoutePreservesPathSuffix(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Request to /hooks/github/events?challenge=abc should forward to /api/webhooks/github/events?challenge=abc
 	req := httptest.NewRequest(http.MethodPost, "https://test.example.com/hooks/github/events?challenge=abc", nil)
-	req.Host = "test.example.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = testExampleHost
+	req.RemoteAddr = testLoopbackAddr
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+		t.Fatalf(errFmtStatus200, rr.Code)
 	}
 
 	// Check that path suffix was preserved
@@ -432,19 +486,19 @@ func TestHandler_QueryStringMerging(t *testing.T) {
 		{
 			name:          "request has query, destination doesn't",
 			destQuery:     "",
-			requestQuery:  "event=push",
-			expectedQuery: "event=push",
+			requestQuery:  testEventPush,
+			expectedQuery: testEventPush,
 		},
 		{
 			name:          "destination has query, request doesn't",
-			destQuery:     "token=secret",
+			destQuery:     testTokenSecret,
 			requestQuery:  "",
-			expectedQuery: "token=secret",
+			expectedQuery: testTokenSecret,
 		},
 		{
 			name:          "both have query params - should merge",
-			destQuery:     "token=secret",
-			requestQuery:  "event=push",
+			destQuery:     testTokenSecret,
+			requestQuery:  testEventPush,
 			expectedQuery: "token=secret&event=push",
 		},
 		{
@@ -467,8 +521,8 @@ func TestHandler_QueryStringMerging(t *testing.T) {
 			cfg := &config.Config{
 				Routes: []config.RouteConfig{
 					{
-						Hostname:    "test.example.com",
-						Path:        "/webhook",
+						Hostname:    testExampleHost,
+						Path:        testWebhookPath,
 						Destination: dest,
 					},
 				},
@@ -478,20 +532,20 @@ func TestHandler_QueryStringMerging(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
-			reqURL := "https://test.example.com/webhook"
+			reqURL := testExampleWebhookHTTPS
 			if tc.requestQuery != "" {
 				reqURL += "?" + tc.requestQuery
 			}
 
 			req := httptest.NewRequest(http.MethodPost, reqURL, bytes.NewReader([]byte("{}")))
-			req.Host = "test.example.com"
-			req.RemoteAddr = "127.0.0.1:12345"
+			req.Host = testExampleHost
+			req.RemoteAddr = testLoopbackAddr
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
 			if rr.Code != http.StatusOK {
-				t.Fatalf("expected status 200, got %d", rr.Code)
+				t.Fatalf(errFmtStatus200, rr.Code)
 			}
 
 			if capturedQuery != tc.expectedQuery {
@@ -511,8 +565,8 @@ func TestHandler_PrefixRouteSegmentBoundary(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/hooks",
+				Hostname:    testExampleHost,
+				Path:        testHooksPath,
 				Destination: backend.URL,
 			},
 		},
@@ -528,9 +582,9 @@ func TestHandler_PrefixRouteSegmentBoundary(t *testing.T) {
 		path           string
 		expectedStatus int
 	}{
-		{"exact match", "/hooks", http.StatusOK},
-		{"with trailing slash", "/hooks/", http.StatusOK},
-		{"with suffix", "/hooks/github", http.StatusOK},
+		{"exact match", testHooksPath, http.StatusOK},
+		{"with trailing slash", testHooksPrefix, http.StatusOK},
+		{"with suffix", testHooksGithub, http.StatusOK},
 		{"similar prefix but not segment boundary", "/hookshot", http.StatusNotFound},
 		{"similar prefix with more chars", "/hooks123", http.StatusNotFound},
 	}
@@ -538,8 +592,8 @@ func TestHandler_PrefixRouteSegmentBoundary(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "https://test.example.com"+tc.path, nil)
-			req.Host = "test.example.com"
-			req.RemoteAddr = "127.0.0.1:12345"
+			req.Host = testExampleHost
+			req.RemoteAddr = testLoopbackAddr
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -560,8 +614,8 @@ func TestHandler_BodySizeLimit(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 			},
 		},
@@ -589,9 +643,9 @@ func TestHandler_BodySizeLimit(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			body := bytes.Repeat([]byte("x"), tc.bodySize)
-			req := httptest.NewRequest(http.MethodPost, "https://test.example.com/webhook", bytes.NewReader(body))
-			req.Host = "test.example.com"
-			req.RemoteAddr = "127.0.0.1:12345"
+			req := httptest.NewRequest(http.MethodPost, testExampleWebhookHTTPS, bytes.NewReader(body))
+			req.Host = testExampleHost
+			req.RemoteAddr = testLoopbackAddr
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -613,8 +667,8 @@ func TestHandler_PrefixRouteWithTrailingSlash(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/hooks/",
+				Hostname:    testExampleHost,
+				Path:        testHooksPrefix,
 				Destination: backend.URL,
 			},
 		},
@@ -630,17 +684,17 @@ func TestHandler_PrefixRouteWithTrailingSlash(t *testing.T) {
 		path           string
 		expectedStatus int
 	}{
-		{"exact match with trailing slash", "/hooks/", http.StatusOK},
-		{"deeper path", "/hooks/github", http.StatusOK},
+		{"exact match with trailing slash", testHooksPrefix, http.StatusOK},
+		{"deeper path", testHooksGithub, http.StatusOK},
 		{"even deeper path", "/hooks/github/events", http.StatusOK},
-		{"without trailing slash - no match", "/hooks", http.StatusNotFound},
+		{"without trailing slash - no match", testHooksPath, http.StatusNotFound},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "https://test.example.com"+tc.path, nil)
-			req.Host = "test.example.com"
-			req.RemoteAddr = "127.0.0.1:12345"
+			req.Host = testExampleHost
+			req.RemoteAddr = testLoopbackAddr
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -655,7 +709,7 @@ func TestHandler_PrefixRouteWithTrailingSlash(t *testing.T) {
 func TestNewHandler_BuildVerifiers(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
 		},
 		Verifiers: map[string]config.VerifierConfig{
 			"slack":              {Type: "slack", SigningSecret: "secret"},
@@ -676,7 +730,7 @@ func TestNewHandler_BuildVerifiers(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Verify all verifiers were created
@@ -688,7 +742,7 @@ func TestNewHandler_BuildVerifiers(t *testing.T) {
 func TestNewHandler_InvalidVerifierType(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
 		},
 		Verifiers: map[string]config.VerifierConfig{
 			"invalid": {Type: "unknown_type"},
@@ -707,7 +761,7 @@ func TestNewHandler_InvalidVerifierType(t *testing.T) {
 func TestNewHandler_HMACVerifierError(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
 		},
 		Verifiers: map[string]config.VerifierConfig{
 			"hmac": {Type: "hmac", Header: "X-Sig", Secret: "secret", Hash: "INVALID", Encoding: "hex"},
@@ -726,7 +780,7 @@ func TestNewHandler_HMACVerifierError(t *testing.T) {
 func TestHandler_SetRelayManager(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
 		},
 	}
 
@@ -747,9 +801,9 @@ func TestHandler_RelayDelivery(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.com",
-				Path:       "/webhook",
-				RelayToken: "test-token",
+				Hostname:   testHost,
+				Path:       testWebhookPath,
+				RelayToken: testToken,
 			},
 		},
 	}
@@ -760,7 +814,7 @@ func TestHandler_RelayDelivery(t *testing.T) {
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 	rm := relay.NewManager()
-	rm.RegisterToken("test-token")
+	rm.RegisterToken(testToken)
 	handler.SetRelayManager(rm)
 
 	// Start a poll to accept the webhook
@@ -769,7 +823,7 @@ func TestHandler_RelayDelivery(t *testing.T) {
 
 	webhookReceived := make(chan *relay.Webhook)
 	go func() {
-		webhook, _ := rm.Poll(pollCtx, "test-token")
+		webhook, _ := rm.Poll(pollCtx, testToken)
 		webhookReceived <- webhook
 	}()
 
@@ -781,9 +835,9 @@ func TestHandler_RelayDelivery(t *testing.T) {
 	var responseRecorder *httptest.ResponseRecorder
 	go func() {
 		body := []byte(`{"test":"data"}`)
-		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-		req.Host = "test.com"
-		req.RemoteAddr = "127.0.0.1:12345"
+		req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+		req.Host = testHost
+		req.RemoteAddr = testLoopbackAddr
 		responseRecorder = httptest.NewRecorder()
 		handler.ServeHTTP(responseRecorder, req)
 		close(requestDone)
@@ -801,7 +855,7 @@ func TestHandler_RelayDelivery(t *testing.T) {
 	err := rm.SendResponse(&relay.Response{
 		RequestID:  receivedWebhook.ID,
 		StatusCode: 201,
-		Headers:    map[string][]string{"Content-Type": {"application/json"}},
+		Headers:    map[string][]string{testHeaderContentType: {testContentTypeJSON}},
 		Body:       base64.StdEncoding.EncodeToString([]byte(`{"ok":true}`)),
 	})
 	if err != nil {
@@ -818,7 +872,7 @@ func TestHandler_RelayDelivery(t *testing.T) {
 	if responseRecorder.Code != 201 {
 		t.Errorf("expected status 201, got %d", responseRecorder.Code)
 	}
-	if responseRecorder.Header().Get("Content-Type") != "application/json" {
+	if responseRecorder.Header().Get(testHeaderContentType) != testContentTypeJSON {
 		t.Errorf("expected Content-Type header")
 	}
 }
@@ -827,9 +881,9 @@ func TestHandler_RelayNoClient(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.com",
-				Path:       "/webhook",
-				RelayToken: "test-token",
+				Hostname:   testHost,
+				Path:       testWebhookPath,
+				RelayToken: testToken,
 			},
 		},
 	}
@@ -840,15 +894,15 @@ func TestHandler_RelayNoClient(t *testing.T) {
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 	rm := relay.NewManager()
-	rm.RegisterToken("test-token")
+	rm.RegisterToken(testToken)
 	handler.SetRelayManager(rm)
 
 	// No poll started - no client connected
 
 	body := []byte(`{"test":"data"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -862,9 +916,9 @@ func TestHandler_RelayManagerNotConfigured(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.com",
-				Path:       "/webhook",
-				RelayToken: "test-token",
+				Hostname:   testHost,
+				Path:       testWebhookPath,
+				RelayToken: testToken,
 			},
 		},
 	}
@@ -876,15 +930,15 @@ func TestHandler_RelayManagerNotConfigured(t *testing.T) {
 	// Don't set relay manager
 
 	body := []byte(`{"test":"data"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", rr.Code)
+		t.Errorf(errFmtStatus500, rr.Code)
 	}
 }
 
@@ -892,9 +946,9 @@ func TestHandler_RelayDeliveryContextCancelled(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.com",
-				Path:       "/webhook",
-				RelayToken: "test-token",
+				Hostname:   testHost,
+				Path:       testWebhookPath,
+				RelayToken: testToken,
 			},
 		},
 	}
@@ -905,7 +959,7 @@ func TestHandler_RelayDeliveryContextCancelled(t *testing.T) {
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 	rm := relay.NewManager()
-	rm.RegisterToken("test-token")
+	rm.RegisterToken(testToken)
 	handler.SetRelayManager(rm)
 
 	// Start a poll but don't send response (will cause context timeout)
@@ -913,16 +967,16 @@ func TestHandler_RelayDeliveryContextCancelled(t *testing.T) {
 	defer pollCancel()
 
 	go func() {
-		_, _ = rm.Poll(pollCtx, "test-token")
+		_, _ = rm.Poll(pollCtx, testToken)
 	}()
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Make request with canceled context
 	body := []byte(`{"test":"data"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 
 	// Create a context that times out quickly
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -934,7 +988,7 @@ func TestHandler_RelayDeliveryContextCancelled(t *testing.T) {
 
 	// Should get 502 Bad Gateway on delivery error (context canceled)
 	if rr.Code != http.StatusBadGateway {
-		t.Errorf("expected status 502, got %d", rr.Code)
+		t.Errorf(errFmtStatus502, rr.Code)
 	}
 }
 
@@ -942,9 +996,9 @@ func TestHandler_RelayDeliveryExplicitCancel(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.com",
-				Path:       "/webhook",
-				RelayToken: "test-token",
+				Hostname:   testHost,
+				Path:       testWebhookPath,
+				RelayToken: testToken,
 			},
 		},
 	}
@@ -955,7 +1009,7 @@ func TestHandler_RelayDeliveryExplicitCancel(t *testing.T) {
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 	rm := relay.NewManager()
-	rm.RegisterToken("test-token")
+	rm.RegisterToken(testToken)
 	handler.SetRelayManager(rm)
 
 	// Start a poll that will receive the webhook but cancel before responding
@@ -964,7 +1018,7 @@ func TestHandler_RelayDeliveryExplicitCancel(t *testing.T) {
 
 	webhookReceived := make(chan struct{})
 	go func() {
-		webhook, _ := rm.Poll(pollCtx, "test-token")
+		webhook, _ := rm.Poll(pollCtx, testToken)
 		if webhook != nil {
 			close(webhookReceived)
 			// Don't send response - let the request context be canceled
@@ -975,9 +1029,9 @@ func TestHandler_RelayDeliveryExplicitCancel(t *testing.T) {
 
 	// Make request with a context that we'll cancel explicitly
 	body := []byte(`{"test":"data"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 
 	// Create a context that we cancel explicitly (not timeout)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -995,7 +1049,7 @@ func TestHandler_RelayDeliveryExplicitCancel(t *testing.T) {
 
 	// Should get 502 Bad Gateway on delivery error (context.Canceled)
 	if rr.Code != http.StatusBadGateway {
-		t.Errorf("expected status 502, got %d", rr.Code)
+		t.Errorf(errFmtStatus502, rr.Code)
 	}
 }
 
@@ -1003,10 +1057,10 @@ func TestHandler_VerifierNotFound(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Verifier:    "nonexistent",
-				Destination: "http://backend",
+				Destination: testBackendURL,
 			},
 		},
 		Verifiers: map[string]config.VerifierConfig{}, // Empty
@@ -1020,15 +1074,15 @@ func TestHandler_VerifierNotFound(t *testing.T) {
 	handler.routes[0].Verifier = "nonexistent"
 
 	body := []byte(`{"test":"data"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", rr.Code)
+		t.Errorf(errFmtStatus500, rr.Code)
 	}
 }
 
@@ -1041,8 +1095,8 @@ func TestHandler_HostWithPort(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 			},
 		},
@@ -1057,13 +1111,13 @@ func TestHandler_HostWithPort(t *testing.T) {
 	body := []byte(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "https://test.com:8443/webhook", bytes.NewReader(body))
 	req.Host = "test.com:8443"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rr.Code)
+		t.Errorf(errFmtStatus200, rr.Code)
 	}
 }
 
@@ -1077,7 +1131,7 @@ func TestHandler_IPv6Host(t *testing.T) {
 		Routes: []config.RouteConfig{
 			{
 				Hostname:    "::1",
-				Path:        "/webhook",
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 			},
 		},
@@ -1092,7 +1146,7 @@ func TestHandler_IPv6Host(t *testing.T) {
 	body := []byte(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "http://[::1]:8080/webhook", bytes.NewReader(body))
 	req.Host = "[::1]:8080"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -1111,8 +1165,8 @@ func TestHandler_RouteWithoutIPAllowlist(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 				// No IPAllowlist - any IP should be allowed
 			},
@@ -1125,22 +1179,22 @@ func TestHandler_RouteWithoutIPAllowlist(t *testing.T) {
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 	body := []byte(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "8.8.8.8:12345" // Would be blocked if there was an allowlist
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testPublicIP + testPort // Would be blocked if there was an allowlist
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rr.Code)
+		t.Errorf(errFmtStatus200, rr.Code)
 	}
 }
 
 func TestHandler_WriteRelayResponse_EmptyBody(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", RelayToken: "token"},
+			{Hostname: testHost, Path: "/", RelayToken: "token"},
 		},
 	}
 
@@ -1152,14 +1206,14 @@ func TestHandler_WriteRelayResponse_EmptyBody(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.writeRelayResponse(rr, &relay.Response{
 		StatusCode: 204,
-		Headers:    map[string][]string{"X-Custom": {"value"}},
+		Headers:    map[string][]string{testCustomHeaderShort: {"value"}},
 		Body:       "", // Empty body
 	})
 
 	if rr.Code != 204 {
 		t.Errorf("expected status 204, got %d", rr.Code)
 	}
-	if rr.Header().Get("X-Custom") != "value" {
+	if rr.Header().Get(testCustomHeaderShort) != "value" {
 		t.Errorf("expected X-Custom header")
 	}
 }
@@ -1167,7 +1221,7 @@ func TestHandler_WriteRelayResponse_EmptyBody(t *testing.T) {
 func TestHandler_WriteRelayResponse_InvalidBase64(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", RelayToken: "token"},
+			{Hostname: testHost, Path: "/", RelayToken: "token"},
 		},
 	}
 
@@ -1184,7 +1238,7 @@ func TestHandler_WriteRelayResponse_InvalidBase64(t *testing.T) {
 
 	// Should still write status code, just no body
 	if rr.Code != 200 {
-		t.Errorf("expected status 200, got %d", rr.Code)
+		t.Errorf(errFmtStatus200, rr.Code)
 	}
 }
 
@@ -1192,8 +1246,8 @@ func TestHandler_InvalidDestinationURL(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: "://invalid-url", // Invalid URL
 			},
 		},
@@ -1205,15 +1259,15 @@ func TestHandler_InvalidDestinationURL(t *testing.T) {
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 	body := []byte(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadGateway {
-		t.Errorf("expected status 502, got %d", rr.Code)
+		t.Errorf(errFmtStatus502, rr.Code)
 	}
 }
 
@@ -1230,9 +1284,9 @@ func TestHandler_BodyReadError(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
-				Destination: "http://backend",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
+				Destination: testBackendURL,
 			},
 		},
 	}
@@ -1242,9 +1296,9 @@ func TestHandler_BodyReadError(t *testing.T) {
 
 	handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", &errorReader{err: fmt.Errorf("read error")})
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, &errorReader{err: fmt.Errorf("read error")})
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -1278,8 +1332,8 @@ func TestHandler_UpstreamErrorStatusRecorded(t *testing.T) {
 			cfg := &config.Config{
 				Routes: []config.RouteConfig{
 					{
-						Hostname:    "test.com",
-						Path:        "/webhook",
+						Hostname:    testHost,
+						Path:        testWebhookPath,
 						Destination: backend.URL,
 					},
 				},
@@ -1291,16 +1345,16 @@ func TestHandler_UpstreamErrorStatusRecorded(t *testing.T) {
 			handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
 			body := []byte(`{}`)
-			req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-			req.Host = "test.com"
-			req.RemoteAddr = "127.0.0.1:12345"
+			req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+			req.Host = testHost
+			req.RemoteAddr = testLoopbackAddr
 			rr := httptest.NewRecorder()
 
 			handler.ServeHTTP(rr, req)
 
 			// The recorded response should match the upstream status
 			if rr.Code != tc.upstreamStatus {
-				t.Errorf("expected status %d, got %d", tc.upstreamStatus, rr.Code)
+				t.Errorf(errFmtStatusD, tc.upstreamStatus, rr.Code)
 			}
 		})
 	}
@@ -1321,74 +1375,74 @@ func TestGetClientIP_TrustEnabled(t *testing.T) {
 	}{
 		{
 			name:       "no X-Forwarded-For uses RemoteAddr (stripped port)",
-			remoteAddr: "192.168.1.100:12345",
-			expectedIP: "192.168.1.100",
+			remoteAddr: testPrivateIP + testPort,
+			expectedIP: testPrivateIP,
 		},
 		{
 			name:          "single IP in X-Forwarded-For",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "203.0.113.50",
-			expectedIP:    "203.0.113.50",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testDocIP1,
+			expectedIP:    testDocIP1,
 		},
 		{
 			name:          "multiple IPs in X-Forwarded-For uses leftmost",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "203.0.113.50, 10.0.0.5, 10.0.0.1",
-			expectedIP:    "203.0.113.50",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testDocIP1 + ", " + testPrivate10IP2 + ", " + testPrivate10IP,
+			expectedIP:    testDocIP1,
 		},
 		{
 			name:          "X-Forwarded-For with spaces",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "  203.0.113.50  ,  10.0.0.5  ",
-			expectedIP:    "203.0.113.50",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: "  " + testDocIP1 + "  ,  " + testPrivate10IP2 + "  ",
+			expectedIP:    testDocIP1,
 		},
 		{
 			name:          "IPv6 in X-Forwarded-For",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "2001:db8::1",
-			expectedIP:    "2001:db8::1",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testIPv6Public,
+			expectedIP:    testIPv6Public,
 		},
 		{
 			name:          "private IP first, public IP second - returns public",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "10.10.0.5, 98.158.192.247",
-			expectedIP:    "98.158.192.247",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testPrivate10IP3 + ", " + testPublicIP2,
+			expectedIP:    testPublicIP2,
 		},
 		{
 			name:          "multiple private IPs then public - returns public",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "10.10.0.5, 192.168.1.1, 98.158.192.247, 172.16.0.1",
-			expectedIP:    "98.158.192.247",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testPrivate10IP3 + ", " + testPrivateIP2 + ", " + testPublicIP2 + ", " + testPrivate172IP,
+			expectedIP:    testPublicIP2,
 		},
 		{
 			name:          "loopback IP skipped",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "127.0.0.1, 203.0.113.50",
-			expectedIP:    "203.0.113.50",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: "127.0.0.1, " + testDocIP1,
+			expectedIP:    testDocIP1,
 		},
 		{
 			name:          "all private IPs - returns leftmost as fallback",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "10.10.0.5, 192.168.1.1, 172.16.0.1",
-			expectedIP:    "10.10.0.5",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testPrivate10IP3 + ", " + testPrivateIP2 + ", " + testPrivate172IP,
+			expectedIP:    testPrivate10IP3,
 		},
 		{
 			name:          "link-local IP skipped",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "169.254.1.1, 203.0.113.50",
-			expectedIP:    "203.0.113.50",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testLinkLocalIP3 + ", " + testDocIP1,
+			expectedIP:    testDocIP1,
 		},
 		{
 			name:          "single private IP - returns it as fallback",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "192.168.1.100",
-			expectedIP:    "192.168.1.100",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testPrivateIP,
+			expectedIP:    testPrivateIP,
 		},
 		{
 			name:          "empty entries in X-Forwarded-For skipped",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "10.0.0.5, , , 203.0.113.50",
-			expectedIP:    "203.0.113.50",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testPrivate10IP2 + ", , , " + testDocIP1,
+			expectedIP:    testDocIP1,
 		},
 	}
 
@@ -1397,7 +1451,7 @@ func TestGetClientIP_TrustEnabled(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req.RemoteAddr = tc.remoteAddr
 			if tc.xForwardedFor != "" {
-				req.Header.Set("X-Forwarded-For", tc.xForwardedFor)
+				req.Header.Set(testHeaderXFF, tc.xForwardedFor)
 			}
 
 			ip := handler.getClientIP(req)
@@ -1423,30 +1477,30 @@ func TestGetClientIP_TrustDisabled(t *testing.T) {
 	}{
 		{
 			name:       "uses RemoteAddr (stripped port)",
-			remoteAddr: "192.168.1.100:12345",
-			expectedIP: "192.168.1.100",
+			remoteAddr: testPrivateIP + testPort,
+			expectedIP: testPrivateIP,
 		},
 		{
 			name:          "ignores X-Forwarded-For when trust disabled",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "203.0.113.50",
-			expectedIP:    "10.0.0.1",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testDocIP1,
+			expectedIP:    testPrivate10IP,
 		},
 		{
 			name:          "ignores X-Forwarded-For chain when trust disabled",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "203.0.113.50, 10.0.0.5, 10.0.0.1",
-			expectedIP:    "10.0.0.1",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testDocIP1 + ", " + testPrivate10IP2 + ", " + testPrivate10IP,
+			expectedIP:    testPrivate10IP,
 		},
 		{
 			name:       "IPv6 RemoteAddr",
 			remoteAddr: "[2001:db8::1]:12345",
-			expectedIP: "2001:db8::1",
+			expectedIP: testIPv6Public,
 		},
 		{
 			name:       "RemoteAddr without port",
-			remoteAddr: "192.168.1.100",
-			expectedIP: "192.168.1.100",
+			remoteAddr: testPrivateIP,
+			expectedIP: testPrivateIP,
 		},
 	}
 
@@ -1455,7 +1509,7 @@ func TestGetClientIP_TrustDisabled(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req.RemoteAddr = tc.remoteAddr
 			if tc.xForwardedFor != "" {
-				req.Header.Set("X-Forwarded-For", tc.xForwardedFor)
+				req.Header.Set(testHeaderXFF, tc.xForwardedFor)
 			}
 
 			ip := handler.getClientIP(req)
@@ -1475,8 +1529,8 @@ func TestHandler_IPAllowlistWithXForwardedFor(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				IPAllowlist: "allowed",
 				Destination: backend.URL,
 			},
@@ -1485,7 +1539,7 @@ func TestHandler_IPAllowlistWithXForwardedFor(t *testing.T) {
 
 	// Create filter that only allows 203.0.113.0/24
 	filters := ipfilter.NewFilterSet()
-	filter, _ := ipfilter.NewFilter("allowed", []string{"203.0.113.0/24"})
+	filter, _ := ipfilter.NewFilter("allowed", []string{testCIDRDocNet})
 	filters.Add("allowed", filter)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -1500,48 +1554,48 @@ func TestHandler_IPAllowlistWithXForwardedFor(t *testing.T) {
 	}{
 		{
 			name:         "allowed by RemoteAddr",
-			remoteAddr:   "203.0.113.50:12345",
+			remoteAddr:   testDocIP1 + testPort,
 			expectedCode: http.StatusOK,
 		},
 		{
 			name:         "denied by RemoteAddr",
-			remoteAddr:   "192.168.1.1:12345",
+			remoteAddr:   testPrivateIP2 + testPort,
 			expectedCode: http.StatusForbidden,
 		},
 		{
 			name:          "allowed by X-Forwarded-For",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "203.0.113.50",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testDocIP1,
 			expectedCode:  http.StatusOK,
 		},
 		{
 			name:          "denied by X-Forwarded-For",
-			remoteAddr:    "10.0.0.1:12345",
-			xForwardedFor: "192.168.1.1",
+			remoteAddr:    testPrivate10IP + testPort,
+			xForwardedFor: testPrivateIP2,
 			expectedCode:  http.StatusForbidden,
 		},
 		{
 			name:          "X-Forwarded-For takes precedence over allowed RemoteAddr",
-			remoteAddr:    "203.0.113.50:12345",
-			xForwardedFor: "192.168.1.1",
+			remoteAddr:    testDocIP1 + testPort,
+			xForwardedFor: testPrivateIP2,
 			expectedCode:  http.StatusForbidden,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader([]byte("{}")))
-			req.Host = "test.com"
+			req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader([]byte("{}")))
+			req.Host = testHost
 			req.RemoteAddr = tc.remoteAddr
 			if tc.xForwardedFor != "" {
-				req.Header.Set("X-Forwarded-For", tc.xForwardedFor)
+				req.Header.Set(testHeaderXFF, tc.xForwardedFor)
 			}
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
 			if rr.Code != tc.expectedCode {
-				t.Errorf("expected status %d, got %d", tc.expectedCode, rr.Code)
+				t.Errorf(errFmtStatusD, tc.expectedCode, rr.Code)
 			}
 		})
 	}
@@ -1556,8 +1610,8 @@ func TestHandler_IPAllowlistIgnoresXForwardedForWhenTrustDisabled(t *testing.T) 
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				IPAllowlist: "allowed",
 				Destination: backend.URL,
 			},
@@ -1586,37 +1640,37 @@ func TestHandler_IPAllowlistIgnoresXForwardedForWhenTrustDisabled(t *testing.T) 
 		},
 		{
 			name:         "denied by RemoteAddr",
-			remoteAddr:   "192.168.1.1:12345",
+			remoteAddr:   testPrivateIP2 + testPort,
 			expectedCode: http.StatusForbidden,
 		},
 		{
 			name:          "spoofed X-Forwarded-For is ignored - uses RemoteAddr (denied)",
-			remoteAddr:    "192.168.1.1:12345",
-			xForwardedFor: "203.0.113.50", // Attacker tries to spoof allowed IP
+			remoteAddr:    testPrivateIP2 + testPort,
+			xForwardedFor: testDocIP1, // Attacker tries to spoof allowed IP
 			expectedCode:  http.StatusForbidden,
 		},
 		{
 			name:          "spoofed X-Forwarded-For is ignored - uses RemoteAddr (allowed)",
-			remoteAddr:    "203.0.113.50:12345",
-			xForwardedFor: "192.168.1.1", // Would be denied if XFF was trusted
+			remoteAddr:    testDocIP1 + testPort,
+			xForwardedFor: testPrivateIP2, // Would be denied if XFF was trusted
 			expectedCode:  http.StatusOK,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader([]byte("{}")))
-			req.Host = "test.com"
+			req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader([]byte("{}")))
+			req.Host = testHost
 			req.RemoteAddr = tc.remoteAddr
 			if tc.xForwardedFor != "" {
-				req.Header.Set("X-Forwarded-For", tc.xForwardedFor)
+				req.Header.Set(testHeaderXFF, tc.xForwardedFor)
 			}
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
 			if rr.Code != tc.expectedCode {
-				t.Errorf("expected status %d, got %d", tc.expectedCode, rr.Code)
+				t.Errorf(errFmtStatusD, tc.expectedCode, rr.Code)
 			}
 		})
 	}
@@ -1660,15 +1714,15 @@ func TestHandler_RootRoutePrefixForwarding(t *testing.T) {
 		},
 		{
 			name:         "non-root route still works",
-			routePath:    "/hooks",
-			requestPath:  "/hooks/github",
+			routePath:    testHooksPath,
+			requestPath:  testHooksGithub,
 			destPath:     "/api",
 			expectedPath: "/api/github",
 		},
 		{
 			name:         "exact match route",
-			routePath:    "/webhook",
-			requestPath:  "/webhook",
+			routePath:    testWebhookPath,
+			requestPath:  testWebhookPath,
 			destPath:     "/api/receive",
 			expectedPath: "/api/receive",
 		},
@@ -1681,7 +1735,7 @@ func TestHandler_RootRoutePrefixForwarding(t *testing.T) {
 			cfg := &config.Config{
 				Routes: []config.RouteConfig{
 					{
-						Hostname:    "test.com",
+						Hostname:    testHost,
 						Path:        tc.routePath,
 						Destination: backend.URL + tc.destPath,
 					},
@@ -1692,14 +1746,14 @@ func TestHandler_RootRoutePrefixForwarding(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			handler, _ := NewHandler(cfg, filters, logger, HandlerOptions{})
 
-			req := httptest.NewRequest(http.MethodPost, "https://test.com"+tc.requestPath, bytes.NewReader([]byte("{}")))
-			req.Host = "test.com"
+			req := httptest.NewRequest(http.MethodPost, testBaseURL+tc.requestPath, bytes.NewReader([]byte("{}")))
+			req.Host = testHost
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
 			if rr.Code != http.StatusOK {
-				t.Errorf("expected status 200, got %d", rr.Code)
+				t.Errorf(errFmtStatus200, rr.Code)
 			}
 			if receivedPath != tc.expectedPath {
 				t.Errorf("expected path %q, got %q", tc.expectedPath, receivedPath)
@@ -1716,28 +1770,48 @@ func TestCategorizeVerificationError(t *testing.T) {
 	}{
 		{
 			name:     "signature empty",
-			err:      fmt.Errorf("wrapped: %w", verifier.ErrSignatureEmpty),
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrSignatureEmpty),
 			expected: "signature_empty",
 		},
 		{
 			name:     "signature mismatch",
-			err:      fmt.Errorf("wrapped: %w", verifier.ErrSignatureMismatch),
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrSignatureMismatch),
 			expected: "signature_mismatch",
 		},
 		{
 			name:     "timestamp invalid",
-			err:      fmt.Errorf("wrapped: %w", verifier.ErrTimestampInvalid),
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTimestampInvalid),
 			expected: "timestamp_invalid",
 		},
 		{
 			name:     "timestamp expired",
-			err:      fmt.Errorf("wrapped: %w", verifier.ErrTimestampExpired),
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTimestampExpired),
 			expected: "timestamp_expired",
 		},
 		{
 			name:     "token mismatch",
-			err:      fmt.Errorf("wrapped: %w", verifier.ErrTokenMismatch),
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTokenMismatch),
 			expected: "token_mismatch",
+		},
+		{
+			name:     "token missing",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTokenMissing),
+			expected: "token_missing",
+		},
+		{
+			name:     "token expired",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTokenExpired),
+			expected: "token_expired",
+		},
+		{
+			name:     "token invalid",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrTokenInvalid),
+			expected: "token_invalid",
+		},
+		{
+			name:     "claim mismatch",
+			err:      fmt.Errorf(errFmtWrapped, verifier.ErrClaimMismatch),
+			expected: "claim_mismatch",
 		},
 		{
 			name:     "unknown error",
@@ -1753,6 +1827,45 @@ func TestCategorizeVerificationError(t *testing.T) {
 				t.Errorf("expected %q, got %q", tc.expected, result)
 			}
 		})
+	}
+}
+
+// assertReceivedHost checks the received Host header against expectations.
+func assertReceivedHost(t *testing.T, expectedHost, incomingHost, receivedHost string) {
+	t.Helper()
+	if expectedHost != "" {
+		if receivedHost != expectedHost {
+			t.Errorf("expected Host header %q, got %q", expectedHost, receivedHost)
+		}
+		return
+	}
+	// When not preserving, host should be the backend host (from URL)
+	if receivedHost == incomingHost {
+		t.Errorf("expected Host header to be destination host, but got original host %q", receivedHost)
+	}
+}
+
+// assertBackendCalled checks whether the backend was called as expected.
+func assertBackendCalled(t *testing.T, backendCalled, backendShouldRun bool) {
+	t.Helper()
+	if backendCalled == backendShouldRun {
+		return
+	}
+	if backendShouldRun {
+		t.Error("expected backend to be called, but it wasn't")
+	} else {
+		t.Error("expected backend NOT to be called, but it was")
+	}
+}
+
+// assertStatusAndBody checks the response status code and optional body.
+func assertStatusAndBody(t *testing.T, rr *httptest.ResponseRecorder, expectedStatus int, expectedBody string) {
+	t.Helper()
+	if rr.Code != expectedStatus {
+		t.Errorf(errFmtStatusBody, expectedStatus, rr.Code, rr.Body.String())
+	}
+	if expectedBody != "" && rr.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rr.Body.String())
 	}
 }
 
@@ -1773,13 +1886,13 @@ func TestHandler_PreserveHost_Direct(t *testing.T) {
 		{
 			name:         "preserve_host true - uses original host",
 			preserveHost: true,
-			incomingHost: "webhooks.example.com",
-			expectedHost: "webhooks.example.com",
+			incomingHost: testWebhooksHost,
+			expectedHost: testWebhooksHost,
 		},
 		{
 			name:         "preserve_host false - uses destination host",
 			preserveHost: false,
-			incomingHost: "webhooks.example.com",
+			incomingHost: testWebhooksHost,
 			expectedHost: "", // Will be backend host
 		},
 	}
@@ -1791,8 +1904,8 @@ func TestHandler_PreserveHost_Direct(t *testing.T) {
 			cfg := &config.Config{
 				Routes: []config.RouteConfig{
 					{
-						Hostname:     "webhooks.example.com",
-						Path:         "/webhook",
+						Hostname:     testWebhooksHost,
+						Path:         testWebhookPath,
 						Destination:  backend.URL,
 						PreserveHost: tc.preserveHost,
 					},
@@ -1805,25 +1918,16 @@ func TestHandler_PreserveHost_Direct(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "https://webhooks.example.com/webhook", bytes.NewReader([]byte("{}")))
 			req.Host = tc.incomingHost
-			req.RemoteAddr = "127.0.0.1:12345"
+			req.RemoteAddr = testLoopbackAddr
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
 			if rr.Code != http.StatusOK {
-				t.Fatalf("expected status 200, got %d", rr.Code)
+				t.Fatalf(errFmtStatus200, rr.Code)
 			}
 
-			if tc.expectedHost != "" {
-				if receivedHost != tc.expectedHost {
-					t.Errorf("expected Host header %q, got %q", tc.expectedHost, receivedHost)
-				}
-			} else {
-				// When not preserving, host should be the backend host (from URL)
-				if receivedHost == tc.incomingHost {
-					t.Errorf("expected Host header to be destination host, but got original host %q", receivedHost)
-				}
-			}
+			assertReceivedHost(t, tc.expectedHost, tc.incomingHost, receivedHost)
 		})
 	}
 }
@@ -1831,7 +1935,7 @@ func TestHandler_PreserveHost_Direct(t *testing.T) {
 func TestNewHandler_BuildValidators(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
 		},
 		Validators: map[string]config.ValidatorConfig{
 			"json": {
@@ -1846,7 +1950,7 @@ func TestNewHandler_BuildValidators(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Verify validator was created
@@ -1858,7 +1962,7 @@ func TestNewHandler_BuildValidators(t *testing.T) {
 func TestNewHandler_InvalidValidatorType(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
 		},
 		Validators: map[string]config.ValidatorConfig{
 			"invalid": {Type: "unknown_type"},
@@ -1878,10 +1982,10 @@ func TestHandler_ValidatorNotFound(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Validator:   "nonexistent",
-				Destination: "http://backend",
+				Destination: testBackendURL,
 			},
 		},
 		Validators: map[string]config.ValidatorConfig{}, // Empty
@@ -1895,15 +1999,15 @@ func TestHandler_ValidatorNotFound(t *testing.T) {
 	handler.routes[0].Validator = "nonexistent"
 
 	body := []byte(`{"test":"data"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", rr.Code)
+		t.Errorf(errFmtStatus500, rr.Code)
 	}
 }
 
@@ -1916,8 +2020,8 @@ func TestHandler_ValidationFailure(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Validator:   "strict-schema",
 				Destination: backend.URL,
 			},
@@ -1935,14 +2039,14 @@ func TestHandler_ValidationFailure(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Invalid payload - missing required "id" field
 	body := []byte(`{"name":"test"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -1961,8 +2065,8 @@ func TestHandler_ValidationSuccess(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Validator:   "schema",
 				Destination: backend.URL,
 			},
@@ -1980,14 +2084,14 @@ func TestHandler_ValidationSuccess(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Valid payload
 	body := []byte(`{"id": 123}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -2007,8 +2111,8 @@ func TestHandler_ValidationWithVerification(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Verifier:    "slack",
 				Validator:   "schema",
 				Destination: backend.URL,
@@ -2017,7 +2121,7 @@ func TestHandler_ValidationWithVerification(t *testing.T) {
 		Verifiers: map[string]config.VerifierConfig{
 			"slack": {
 				Type:          "slack",
-				SigningSecret: "test-secret",
+				SigningSecret: testSecret,
 			},
 		},
 		Validators: map[string]config.ValidatorConfig{
@@ -2033,23 +2137,23 @@ func TestHandler_ValidationWithVerification(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Valid signature but invalid payload
 	body := []byte(`{"name":"test"}`)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 
 	// Sign the request
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
-	mac := hmac.New(sha256.New, []byte("test-secret"))
+	sigBase := fmt.Sprintf(testSlackSigFmt, timestamp, string(body))
+	mac := hmac.New(sha256.New, []byte(testSecret))
 	mac.Write([]byte(sigBase))
 	signature := "v0=" + hex.EncodeToString(mac.Sum(nil))
-	req.Header.Set("X-Slack-Request-Timestamp", timestamp)
-	req.Header.Set("X-Slack-Signature", signature)
+	req.Header.Set(testSlackTimestampHeader, timestamp)
+	req.Header.Set(testSlackSigHeader, signature)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -2072,27 +2176,27 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/slack-webhook",
+				Hostname:    testHost,
+				Path:        testSlackWebhookPath,
 				Verifier:    "slack",
 				Destination: backend.URL,
 			},
 			{
-				Hostname:    "test.com",
+				Hostname:    testHost,
 				Path:        "/noop-webhook",
 				Verifier:    "noop",
 				Destination: backend.URL,
 			},
 			{
-				Hostname:    "test.com",
-				Path:        "/no-verifier",
+				Hostname:    testHost,
+				Path:        testNoVerifierPath,
 				Destination: backend.URL,
 			},
 		},
 		Verifiers: map[string]config.VerifierConfig{
 			"slack": {
 				Type:          "slack",
-				SigningSecret: "test-secret",
+				SigningSecret: testSecret,
 			},
 			"noop": {
 				Type: "noop",
@@ -2105,18 +2209,18 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	signRequest := func(body []byte) func(r *http.Request) {
 		return func(r *http.Request) {
 			timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-			sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
-			mac := hmac.New(sha256.New, []byte("test-secret"))
+			sigBase := fmt.Sprintf(testSlackSigFmt, timestamp, string(body))
+			mac := hmac.New(sha256.New, []byte(testSecret))
 			mac.Write([]byte(sigBase))
 			signature := "v0=" + hex.EncodeToString(mac.Sum(nil))
-			r.Header.Set("X-Slack-Request-Timestamp", timestamp)
-			r.Header.Set("X-Slack-Signature", signature)
+			r.Header.Set(testSlackTimestampHeader, timestamp)
+			r.Header.Set(testSlackSigHeader, signature)
 		}
 	}
 
@@ -2131,7 +2235,7 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 	}{
 		{
 			name:             "URL verification challenge is handled directly",
-			path:             "/slack-webhook",
+			path:             testSlackWebhookPath,
 			body:             `{"type":"url_verification","challenge":"test-challenge-123"}`,
 			setupHeaders:     signRequest([]byte(`{"type":"url_verification","challenge":"test-challenge-123"}`)),
 			expectedStatus:   http.StatusOK,
@@ -2140,7 +2244,7 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 		},
 		{
 			name:             "regular Slack event is forwarded",
-			path:             "/slack-webhook",
+			path:             testSlackWebhookPath,
 			body:             `{"type":"event_callback","event":{"type":"message"}}`,
 			setupHeaders:     signRequest([]byte(`{"type":"event_callback","event":{"type":"message"}}`)),
 			expectedStatus:   http.StatusOK,
@@ -2155,14 +2259,14 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 		},
 		{
 			name:             "URL verification on route without verifier is forwarded",
-			path:             "/no-verifier",
+			path:             testNoVerifierPath,
 			body:             `{"type":"url_verification","challenge":"test-challenge"}`,
 			expectedStatus:   http.StatusOK,
 			backendShouldRun: true,
 		},
 		{
 			name:             "invalid JSON is forwarded (not treated as URL verification)",
-			path:             "/slack-webhook",
+			path:             testSlackWebhookPath,
 			body:             `not json`,
 			setupHeaders:     signRequest([]byte(`not json`)),
 			expectedStatus:   http.StatusOK,
@@ -2170,7 +2274,7 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 		},
 		{
 			name:             "missing challenge field is forwarded",
-			path:             "/slack-webhook",
+			path:             testSlackWebhookPath,
 			body:             `{"type":"url_verification"}`,
 			setupHeaders:     signRequest([]byte(`{"type":"url_verification"}`)),
 			expectedStatus:   http.StatusOK,
@@ -2178,7 +2282,7 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 		},
 		{
 			name:             "empty challenge is forwarded",
-			path:             "/slack-webhook",
+			path:             testSlackWebhookPath,
 			body:             `{"type":"url_verification","challenge":""}`,
 			setupHeaders:     signRequest([]byte(`{"type":"url_verification","challenge":""}`)),
 			expectedStatus:   http.StatusOK,
@@ -2190,9 +2294,9 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			backendCalled = false
 
-			req := httptest.NewRequest(http.MethodPost, "https://test.com"+tc.path, bytes.NewReader([]byte(tc.body)))
-			req.Host = "test.com"
-			req.RemoteAddr = "127.0.0.1:12345"
+			req := httptest.NewRequest(http.MethodPost, testBaseURL+tc.path, bytes.NewReader([]byte(tc.body)))
+			req.Host = testHost
+			req.RemoteAddr = testLoopbackAddr
 
 			if tc.setupHeaders != nil {
 				tc.setupHeaders(req)
@@ -2201,21 +2305,8 @@ func TestHandler_SlackURLVerification(t *testing.T) {
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
-			if rr.Code != tc.expectedStatus {
-				t.Errorf("expected status %d, got %d (body: %s)", tc.expectedStatus, rr.Code, rr.Body.String())
-			}
-
-			if tc.expectedBody != "" && rr.Body.String() != tc.expectedBody {
-				t.Errorf("expected body %q, got %q", tc.expectedBody, rr.Body.String())
-			}
-
-			if backendCalled != tc.backendShouldRun {
-				if tc.backendShouldRun {
-					t.Error("expected backend to be called, but it wasn't")
-				} else {
-					t.Error("expected backend NOT to be called, but it was")
-				}
-			}
+			assertStatusAndBody(t, rr, tc.expectedStatus, tc.expectedBody)
+			assertBackendCalled(t, backendCalled, tc.backendShouldRun)
 		})
 	}
 }
@@ -2225,16 +2316,16 @@ func TestHandler_SlackURLVerification_Relay(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.com",
-				Path:       "/webhook",
+				Hostname:   testHost,
+				Path:       testWebhookPath,
 				Verifier:   "slack",
-				RelayToken: "test-token",
+				RelayToken: testToken,
 			},
 		},
 		Verifiers: map[string]config.VerifierConfig{
 			"slack": {
 				Type:          "slack",
-				SigningSecret: "test-secret",
+				SigningSecret: testSecret,
 			},
 		},
 	}
@@ -2247,22 +2338,22 @@ func TestHandler_SlackURLVerification_Relay(t *testing.T) {
 	// Setup relay manager but DON'T start polling
 	// This simulates relay mode where there might be latency or no client connected
 	rm := relay.NewManager()
-	rm.RegisterToken("test-token")
+	rm.RegisterToken(testToken)
 	handler.SetRelayManager(rm)
 
 	// Send URL verification request
 	body := []byte(`{"type":"url_verification","challenge":"relay-test-challenge"}`)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
-	mac := hmac.New(sha256.New, []byte("test-secret"))
+	sigBase := fmt.Sprintf(testSlackSigFmt, timestamp, string(body))
+	mac := hmac.New(sha256.New, []byte(testSecret))
 	mac.Write([]byte(sigBase))
 	signature := "v0=" + hex.EncodeToString(mac.Sum(nil))
 
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", bytes.NewReader(body))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
-	req.Header.Set("X-Slack-Request-Timestamp", timestamp)
-	req.Header.Set("X-Slack-Signature", signature)
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, bytes.NewReader(body))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
+	req.Header.Set(testSlackTimestampHeader, timestamp)
+	req.Header.Set(testSlackSigHeader, signature)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -2279,14 +2370,14 @@ func TestHandler_SlackURLVerification_Relay(t *testing.T) {
 func TestHandler_VerifierTypesMap(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
-			{Hostname: "test.com", Path: "/", Destination: "http://backend"},
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
 		},
 		Verifiers: map[string]config.VerifierConfig{
-			"my-slack":   {Type: "slack", SigningSecret: "secret"},
-			"my-github":  {Type: "github", Secret: "secret"},
-			"my-shopify": {Type: "shopify", Secret: "secret"},
-			"my-noop":    {Type: "noop"},
-			"my-gitlab":  {Type: "gitlab", Token: "secret"},
+			testSlackVerifierName:   {Type: "slack", SigningSecret: "secret"},
+			testGithubVerifierName:  {Type: "github", Secret: "secret"},
+			testShopifyVerifierName: {Type: "shopify", Secret: "secret"},
+			testNoopVerifierName:    {Type: "noop"},
+			testGitlabVerifierName:  {Type: "gitlab", Token: "secret"},
 		},
 	}
 
@@ -2295,24 +2386,24 @@ func TestHandler_VerifierTypesMap(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Verify verifier types are tracked
-	if handler.verifierTypes["my-slack"] != "slack" {
-		t.Errorf("expected verifierTypes['my-slack']='slack', got %q", handler.verifierTypes["my-slack"])
+	if handler.verifierTypes[testSlackVerifierName] != "slack" {
+		t.Errorf("expected verifierTypes['my-slack']='slack', got %q", handler.verifierTypes[testSlackVerifierName])
 	}
-	if handler.verifierTypes["my-github"] != "github" {
-		t.Errorf("expected verifierTypes['my-github']='github', got %q", handler.verifierTypes["my-github"])
+	if handler.verifierTypes[testGithubVerifierName] != "github" {
+		t.Errorf("expected verifierTypes['my-github']='github', got %q", handler.verifierTypes[testGithubVerifierName])
 	}
-	if handler.verifierTypes["my-shopify"] != "shopify" {
-		t.Errorf("expected verifierTypes['my-shopify']='shopify', got %q", handler.verifierTypes["my-shopify"])
+	if handler.verifierTypes[testShopifyVerifierName] != "shopify" {
+		t.Errorf("expected verifierTypes['my-shopify']='shopify', got %q", handler.verifierTypes[testShopifyVerifierName])
 	}
-	if handler.verifierTypes["my-noop"] != "noop" {
-		t.Errorf("expected verifierTypes['my-noop']='noop', got %q", handler.verifierTypes["my-noop"])
+	if handler.verifierTypes[testNoopVerifierName] != "noop" {
+		t.Errorf("expected verifierTypes['my-noop']='noop', got %q", handler.verifierTypes[testNoopVerifierName])
 	}
-	if handler.verifierTypes["my-gitlab"] != "gitlab" {
-		t.Errorf("expected verifierTypes['my-gitlab']='gitlab', got %q", handler.verifierTypes["my-gitlab"])
+	if handler.verifierTypes[testGitlabVerifierName] != "gitlab" {
+		t.Errorf("expected verifierTypes['my-gitlab']='gitlab', got %q", handler.verifierTypes[testGitlabVerifierName])
 	}
 }
 
@@ -2322,38 +2413,38 @@ func TestIsPrivateIP(t *testing.T) {
 		expected bool
 	}{
 		// Private IPv4 (RFC 1918)
-		{"10.0.0.1", true},
-		{"10.255.255.255", true},
-		{"172.16.0.1", true},
-		{"172.31.255.255", true},
-		{"192.168.0.1", true},
-		{"192.168.255.255", true},
+		{testPrivate10IP, true},
+		{testPrivate10IP4, true},
+		{testPrivate172IP, true},
+		{testPrivate172IP2, true},
+		{testPrivateIP3, true},
+		{testPrivateIP4, true},
 
 		// Loopback
-		{"127.0.0.1", true},
-		{"127.255.255.255", true},
+		{testLoopbackIP, true},
+		{testLoopbackIP2, true},
 
 		// Link-local
-		{"169.254.0.1", true},
-		{"169.254.255.255", true},
+		{testLinkLocalIP, true},
+		{testLinkLocalIP2, true},
 
 		// Public IPv4
-		{"8.8.8.8", false},
-		{"203.0.113.50", false},
-		{"98.158.192.247", false},
-		{"1.1.1.1", false},
+		{testPublicIP, false},
+		{testDocIP1, false},
+		{testPublicIP2, false},
+		{testPublicIP3, false},
 
 		// IPv6 loopback
-		{"::1", true},
+		{testIPv6Loopback, true},
 
 		// IPv6 link-local
-		{"fe80::1", true},
+		{testIPv6LinkLocal, true},
 
 		// IPv6 private (ULA)
-		{"fd00::1", true},
+		{testIPv6ULA, true},
 
 		// IPv6 public
-		{"2001:db8::1", false},
+		{testIPv6Public, false},
 
 		// Invalid
 		{"not-an-ip", false},
@@ -2374,9 +2465,9 @@ func TestHandler_WriteRelayResponse_StripsHopByHopHeaders(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.example.com",
-				Path:       "/webhook",
-				RelayToken: "test-token",
+				Hostname:   testExampleHost,
+				Path:       testWebhookPath,
+				RelayToken: testToken,
 			},
 		},
 	}
@@ -2387,7 +2478,7 @@ func TestHandler_WriteRelayResponse_StripsHopByHopHeaders(t *testing.T) {
 
 	// Setup relay manager
 	relayManager := relay.NewManager()
-	relayManager.RegisterToken("test-token")
+	relayManager.RegisterToken(testToken)
 	handler.SetRelayManager(relayManager)
 
 	// Start a poll in background to make the relay client "connected"
@@ -2395,19 +2486,19 @@ func TestHandler_WriteRelayResponse_StripsHopByHopHeaders(t *testing.T) {
 	defer pollCancel()
 
 	go func() {
-		webhook, _ := relayManager.Poll(pollCtx, "test-token")
+		webhook, _ := relayManager.Poll(pollCtx, testToken)
 		if webhook != nil {
 			// Send response with hop-by-hop headers
 			_ = relayManager.SendResponse(&relay.Response{
 				RequestID:  webhook.ID,
 				StatusCode: 200,
 				Headers: map[string][]string{
-					"Content-Type":      {"application/json"},
-					"X-Custom":          {"preserved"},
-					"Connection":        {"keep-alive"},
-					"Keep-Alive":        {"timeout=5"},
-					"Transfer-Encoding": {"chunked"},
-					"Content-Length":    {"9999"}, // Wrong length
+					testHeaderContentType:   {testContentTypeJSON},
+					testCustomHeaderShort:   {"preserved"},
+					"Connection":            {"keep-alive"},
+					"Keep-Alive":            {"timeout=5"},
+					"Transfer-Encoding":     {"chunked"},
+					testHeaderContentLength: {"9999"}, // Wrong length
 				},
 				Body: base64.StdEncoding.EncodeToString([]byte(`{"ok":true}`)),
 			})
@@ -2418,15 +2509,15 @@ func TestHandler_WriteRelayResponse_StripsHopByHopHeaders(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Send request to trigger relay delivery
-	req := httptest.NewRequest(http.MethodPost, "https://test.example.com/webhook", bytes.NewReader([]byte("{}")))
-	req.Host = "test.example.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testExampleWebhookHTTPS, bytes.NewReader([]byte("{}")))
+	req.Host = testExampleHost
+	req.RemoteAddr = testLoopbackAddr
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+		t.Fatalf(errFmtStatus200, rr.Code)
 	}
 
 	// Verify hop-by-hop headers were stripped
@@ -2444,12 +2535,12 @@ func TestHandler_WriteRelayResponse_StripsHopByHopHeaders(t *testing.T) {
 
 	// Content-Length should match actual body length
 	expectedLen := len(`{"ok":true}`)
-	if rr.Header().Get("Content-Length") != fmt.Sprintf("%d", expectedLen) {
-		t.Errorf("Content-Length should be %d, got %q", expectedLen, rr.Header().Get("Content-Length"))
+	if rr.Header().Get(testHeaderContentLength) != fmt.Sprintf("%d", expectedLen) {
+		t.Errorf("Content-Length should be %d, got %q", expectedLen, rr.Header().Get(testHeaderContentLength))
 	}
 
 	// Custom header should be preserved
-	if rr.Header().Get("X-Custom") != "preserved" {
+	if rr.Header().Get(testCustomHeaderShort) != "preserved" {
 		t.Error("X-Custom header should be preserved")
 	}
 }
@@ -2478,7 +2569,7 @@ func TestTruncateForLog(t *testing.T) {
 		{
 			name:     "over 8192 bytes gets truncated",
 			input:    bytes.Repeat([]byte("a"), 10000),
-			expected: string(bytes.Repeat([]byte("a"), 8192)) + "... (truncated)",
+			expected: string(bytes.Repeat([]byte("a"), 8192)) + testTruncated,
 		},
 	}
 
@@ -2488,8 +2579,8 @@ func TestTruncateForLog(t *testing.T) {
 			if result != tc.expected {
 				if len(tc.expected) > 100 {
 					t.Errorf("expected length %d (truncated=%v), got length %d (truncated=%v)",
-						len(tc.expected), strings.HasSuffix(tc.expected, "... (truncated)"),
-						len(result), strings.HasSuffix(result, "... (truncated)"))
+						len(tc.expected), strings.HasSuffix(tc.expected, testTruncated),
+						len(result), strings.HasSuffix(result, testTruncated))
 				} else {
 					t.Errorf("expected %q, got %q", tc.expected, result)
 				}
@@ -2501,7 +2592,7 @@ func TestTruncateForLog(t *testing.T) {
 func TestHandler_DebugPayloads(t *testing.T) {
 	// Create a test backend
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(testHeaderContentType, testContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"result":"ok"}`))
 	}))
@@ -2510,8 +2601,8 @@ func TestHandler_DebugPayloads(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.example.com",
-				Path:        "/webhook",
+				Hostname:    testExampleHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 			},
 		},
@@ -2527,17 +2618,17 @@ func TestHandler_DebugPayloads(t *testing.T) {
 		DebugPayloads: true,
 	})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
-	req := httptest.NewRequest("POST", "http://test.example.com/webhook", strings.NewReader(`{"test":"data"}`))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest("POST", testExampleWebhookHTTP, strings.NewReader(`{"test":"data"}`))
+	req.Header.Set(testHeaderContentType, testContentTypeJSON)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+		t.Fatalf(errFmtStatus200, rr.Code)
 	}
 
 	logOutput := logBuf.String()
@@ -2562,9 +2653,9 @@ func TestHandler_DebugPayloads_Relay(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.example.com",
-				Path:       "/webhook",
-				RelayToken: "test-token",
+				Hostname:   testExampleHost,
+				Path:       testWebhookPath,
+				RelayToken: testToken,
 			},
 		},
 	}
@@ -2579,12 +2670,12 @@ func TestHandler_DebugPayloads_Relay(t *testing.T) {
 		DebugPayloads: true,
 	})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Set up relay manager
 	relayMgr := relay.NewMemoryManager()
-	relayMgr.RegisterToken("test-token")
+	relayMgr.RegisterToken(testToken)
 	handler.SetRelayManager(relayMgr)
 
 	// Start relay client goroutine first and give it time to start polling
@@ -2593,14 +2684,14 @@ func TestHandler_DebugPayloads_Relay(t *testing.T) {
 		close(pollStarted)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		webhook, err := relayMgr.Poll(ctx, "test-token")
+		webhook, err := relayMgr.Poll(ctx, testToken)
 		if err != nil || webhook == nil {
 			return
 		}
 		_ = relayMgr.SendResponse(&relay.Response{
 			RequestID:  webhook.ID,
 			StatusCode: 200,
-			Headers:    map[string][]string{"Content-Type": {"application/json"}},
+			Headers:    map[string][]string{testHeaderContentType: {testContentTypeJSON}},
 			Body:       base64.StdEncoding.EncodeToString([]byte(`{"relayed":"true"}`)),
 		})
 	}()
@@ -2609,14 +2700,14 @@ func TestHandler_DebugPayloads_Relay(t *testing.T) {
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
 
-	req := httptest.NewRequest("POST", "http://test.example.com/webhook", strings.NewReader(`{"relay":"test"}`))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest("POST", testExampleWebhookHTTP, strings.NewReader(`{"relay":"test"}`))
+	req.Header.Set(testHeaderContentType, testContentTypeJSON)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+		t.Fatalf(errFmtStatus200, rr.Code)
 	}
 
 	logOutput := logBuf.String()
@@ -2642,32 +2733,32 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/graph-webhook",
-				Verifier:    "ms-graph",
+				Hostname:    testHost,
+				Path:        testGraphWebhookPath,
+				Verifier:    testMSGraphVerifierName,
 				Destination: backend.URL,
 			},
 			{
-				Hostname:    "test.com",
-				Path:        "/slack-webhook",
+				Hostname:    testHost,
+				Path:        testSlackWebhookPath,
 				Verifier:    "slack",
 				Destination: backend.URL,
 			},
 			{
-				Hostname:    "test.com",
-				Path:        "/no-verifier",
+				Hostname:    testHost,
+				Path:        testNoVerifierPath,
 				Destination: backend.URL,
 			},
 		},
 		Verifiers: map[string]config.VerifierConfig{
-			"ms-graph": {
+			testMSGraphVerifierName: {
 				Type:  "json_field",
 				Path:  "value.0.clientState",
-				Token: "test-token",
+				Token: testToken,
 			},
 			"slack": {
 				Type:          "slack",
-				SigningSecret: "test-secret",
+				SigningSecret: testSecret,
 			},
 		},
 	}
@@ -2677,7 +2768,7 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	tests := []struct {
@@ -2691,7 +2782,7 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 	}{
 		{
 			name:             "validation token is echoed back",
-			path:             "/graph-webhook",
+			path:             testGraphWebhookPath,
 			queryParams:      "validationToken=Validation%3ATestToken123",
 			body:             "",
 			expectedStatus:   http.StatusOK,
@@ -2700,7 +2791,7 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 		},
 		{
 			name:             "validation token with special characters",
-			path:             "/graph-webhook",
+			path:             testGraphWebhookPath,
 			queryParams:      "validationToken=abc%2B%2F%3D123",
 			body:             "",
 			expectedStatus:   http.StatusOK,
@@ -2709,7 +2800,7 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 		},
 		{
 			name:             "no validationToken - fails verification (empty body)",
-			path:             "/graph-webhook",
+			path:             testGraphWebhookPath,
 			queryParams:      "",
 			body:             "",
 			expectedStatus:   http.StatusUnauthorized,
@@ -2717,7 +2808,7 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 		},
 		{
 			name:             "validationToken on non-json_field route is ignored",
-			path:             "/slack-webhook",
+			path:             testSlackWebhookPath,
 			queryParams:      "validationToken=ShouldBeIgnored",
 			body:             "",
 			expectedStatus:   http.StatusUnauthorized, // Slack verification fails
@@ -2725,7 +2816,7 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 		},
 		{
 			name:             "validationToken on route without verifier is ignored",
-			path:             "/no-verifier",
+			path:             testNoVerifierPath,
 			queryParams:      "validationToken=ShouldBeIgnored",
 			body:             "",
 			expectedStatus:   http.StatusOK, // No verification needed, forwarded to backend
@@ -2733,7 +2824,7 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 		},
 		{
 			name:             "regular Graph notification with valid body is forwarded",
-			path:             "/graph-webhook",
+			path:             testGraphWebhookPath,
 			queryParams:      "",
 			body:             `{"value":[{"clientState":"test-token"}]}`,
 			expectedStatus:   http.StatusOK,
@@ -2745,39 +2836,31 @@ func TestHandler_MicrosoftGraphValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			backendCalled = false
 
-			url := "https://test.com" + tc.path
+			url := testBaseURL + tc.path
 			if tc.queryParams != "" {
 				url += "?" + tc.queryParams
 			}
 
 			req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(tc.body)))
-			req.Host = "test.com"
-			req.RemoteAddr = "127.0.0.1:12345"
-			if tc.body != "" {
-				req.Header.Set("Content-Type", "application/json")
-			} else {
-				req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-			}
+			req.Host = testHost
+			req.RemoteAddr = testLoopbackAddr
+			setGraphContentType(req, tc.body)
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
-			if rr.Code != tc.expectedStatus {
-				t.Errorf("expected status %d, got %d (body: %s)", tc.expectedStatus, rr.Code, rr.Body.String())
-			}
-
-			if tc.expectedBody != "" && rr.Body.String() != tc.expectedBody {
-				t.Errorf("expected body %q, got %q", tc.expectedBody, rr.Body.String())
-			}
-
-			if backendCalled != tc.backendShouldRun {
-				if tc.backendShouldRun {
-					t.Error("expected backend to be called, but it wasn't")
-				} else {
-					t.Error("expected backend NOT to be called, but it was")
-				}
-			}
+			assertStatusAndBody(t, rr, tc.expectedStatus, tc.expectedBody)
+			assertBackendCalled(t, backendCalled, tc.backendShouldRun)
 		})
+	}
+}
+
+// setGraphContentType sets Content-Type based on whether the body is empty.
+func setGraphContentType(req *http.Request, body string) {
+	if body != "" {
+		req.Header.Set(testHeaderContentType, testContentTypeJSON)
+	} else {
+		req.Header.Set(testHeaderContentType, "text/plain; charset=utf-8")
 	}
 }
 
@@ -2786,17 +2869,17 @@ func TestHandler_MicrosoftGraphValidation_Relay(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:   "test.com",
-				Path:       "/webhook",
-				Verifier:   "ms-graph",
-				RelayToken: "test-token",
+				Hostname:   testHost,
+				Path:       testWebhookPath,
+				Verifier:   testMSGraphVerifierName,
+				RelayToken: testToken,
 			},
 		},
 		Verifiers: map[string]config.VerifierConfig{
-			"ms-graph": {
+			testMSGraphVerifierName: {
 				Type:  "json_field",
 				Path:  "value.0.clientState",
-				Token: "test-token",
+				Token: testToken,
 			},
 		},
 	}
@@ -2809,14 +2892,14 @@ func TestHandler_MicrosoftGraphValidation_Relay(t *testing.T) {
 	// Setup relay manager but DON'T start polling
 	// This simulates relay mode where there might be latency or no client connected
 	rm := relay.NewManager()
-	rm.RegisterToken("test-token")
+	rm.RegisterToken(testToken)
 	handler.SetRelayManager(rm)
 
 	// Send validation request
 	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook?validationToken=relay-test-token", nil)
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
-	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
+	req.Header.Set(testHeaderContentType, "text/plain; charset=utf-8")
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -2840,8 +2923,8 @@ func TestHandler_RateLimiting_NoLimiter(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 			},
 		},
@@ -2851,20 +2934,20 @@ func TestHandler_RateLimiting_NoLimiter(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 	// No SetRateLimiters call - rate limiting not configured
 
 	// Multiple requests should all succeed
 	for i := 0; i < 10; i++ {
-		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-		req.Host = "test.com"
-		req.RemoteAddr = "127.0.0.1:12345"
+		req := httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+		req.Host = testHost
+		req.RemoteAddr = testLoopbackAddr
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
-			t.Errorf("request %d: expected 200, got %d", i, rr.Code)
+			t.Errorf(errFmtRequest200, i, rr.Code)
 		}
 	}
 }
@@ -2878,8 +2961,8 @@ func TestHandler_RateLimiting_TotalLimit(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 				RateLimiter: "strict",
 			},
@@ -2890,7 +2973,7 @@ func TestHandler_RateLimiting_TotalLimit(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Create rate limiter set with very strict limits
@@ -2904,9 +2987,9 @@ func TestHandler_RateLimiting_TotalLimit(t *testing.T) {
 	handler.SetRateLimiters(limiters, "")
 
 	// First request should succeed
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -2915,9 +2998,9 @@ func TestHandler_RateLimiting_TotalLimit(t *testing.T) {
 	}
 
 	// Second request should be rate limited
-	req = httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-	req.Host = "test.com"
-	req.RemoteAddr = "192.168.1.1:12345" // Different IP, but total limit applies
+	req = httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+	req.Host = testHost
+	req.RemoteAddr = testPrivateIP2 + testPort // Different IP, but total limit applies
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -2938,10 +3021,10 @@ func TestHandler_RateLimiting_PerIPLimit(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
-				RateLimiter: "per-ip",
+				RateLimiter: testPerIPMode,
 			},
 		},
 	}
@@ -2950,7 +3033,7 @@ func TestHandler_RateLimiting_PerIPLimit(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	// Burst applies to both total and per-IP equally
@@ -2958,7 +3041,7 @@ func TestHandler_RateLimiting_PerIPLimit(t *testing.T) {
 	// High total RPS ensures total limit refills fast enough to not be a bottleneck
 	limiters := ratelimit.NewSet()
 	defer limiters.Stop()
-	limiters.Add("per-ip", ratelimit.New("per-ip", ratelimit.Config{
+	limiters.Add(testPerIPMode, ratelimit.New(testPerIPMode, ratelimit.Config{
 		TotalRPS: 10000, // Very high total limit (refills quickly)
 		PerIPRPS: 1,     // Low per-IP limit
 		Burst:    5,     // Allow 5 burst requests per IP
@@ -2967,9 +3050,9 @@ func TestHandler_RateLimiting_PerIPLimit(t *testing.T) {
 
 	// First 5 requests from IP1 should succeed (using burst)
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-		req.Host = "test.com"
-		req.RemoteAddr = "192.168.1.1:12345"
+		req := httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+		req.Host = testHost
+		req.RemoteAddr = testPrivateIP2 + testPort
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 
@@ -2979,9 +3062,9 @@ func TestHandler_RateLimiting_PerIPLimit(t *testing.T) {
 	}
 
 	// 6th request from IP1 should be rate limited (burst exhausted)
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-	req.Host = "test.com"
-	req.RemoteAddr = "192.168.1.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+	req.Host = testHost
+	req.RemoteAddr = testPrivateIP2 + testPort
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -2990,9 +3073,9 @@ func TestHandler_RateLimiting_PerIPLimit(t *testing.T) {
 	}
 
 	// First request from IP2 should succeed (different per-IP limiter with its own burst)
-	req = httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-	req.Host = "test.com"
-	req.RemoteAddr = "192.168.1.2:12345"
+	req = httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+	req.Host = testHost
+	req.RemoteAddr = testPrivateIP5 + testPort
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -3010,8 +3093,8 @@ func TestHandler_RateLimiting_GlobalDefault(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 				// No RateLimiter specified - should use global default
 			},
@@ -3022,7 +3105,7 @@ func TestHandler_RateLimiting_GlobalDefault(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	limiters := ratelimit.NewSet()
@@ -3034,9 +3117,9 @@ func TestHandler_RateLimiting_GlobalDefault(t *testing.T) {
 	handler.SetRateLimiters(limiters, "default") // Set global default
 
 	// First request should succeed
-	req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req := httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -3045,9 +3128,9 @@ func TestHandler_RateLimiting_GlobalDefault(t *testing.T) {
 	}
 
 	// Second request should be rate limited
-	req = httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-	req.Host = "test.com"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req = httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+	req.Host = testHost
+	req.RemoteAddr = testLoopbackAddr
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -3065,8 +3148,8 @@ func TestHandler_RateLimiting_RouteOverridesDefault(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 				RateLimiter: "lenient", // Route-specific limiter
 			},
@@ -3077,7 +3160,7 @@ func TestHandler_RateLimiting_RouteOverridesDefault(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	limiters := ratelimit.NewSet()
@@ -3096,14 +3179,14 @@ func TestHandler_RateLimiting_RouteOverridesDefault(t *testing.T) {
 
 	// Multiple requests should succeed (using lenient limiter, not default)
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-		req.Host = "test.com"
-		req.RemoteAddr = "127.0.0.1:12345"
+		req := httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+		req.Host = testHost
+		req.RemoteAddr = testLoopbackAddr
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
-			t.Errorf("request %d: expected 200, got %d", i, rr.Code)
+			t.Errorf(errFmtRequest200, i, rr.Code)
 		}
 	}
 }
@@ -3118,8 +3201,8 @@ func TestHandler_RateLimiting_NoDefaultNoRoute(t *testing.T) {
 	cfg := &config.Config{
 		Routes: []config.RouteConfig{
 			{
-				Hostname:    "test.com",
-				Path:        "/webhook",
+				Hostname:    testHost,
+				Path:        testWebhookPath,
 				Destination: backend.URL,
 				// No RateLimiter specified
 			},
@@ -3130,7 +3213,7 @@ func TestHandler_RateLimiting_NoDefaultNoRoute(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
 	if err != nil {
-		t.Fatalf("failed to create handler: %v", err)
+		t.Fatalf(errFmtHandler, err)
 	}
 
 	limiters := ratelimit.NewSet()
@@ -3143,14 +3226,42 @@ func TestHandler_RateLimiting_NoDefaultNoRoute(t *testing.T) {
 
 	// Multiple requests should succeed (no limiter applied)
 	for i := 0; i < 10; i++ {
-		req := httptest.NewRequest(http.MethodPost, "https://test.com/webhook", strings.NewReader("test"))
-		req.Host = "test.com"
-		req.RemoteAddr = "127.0.0.1:12345"
+		req := httptest.NewRequest(http.MethodPost, testWebhookURL, strings.NewReader("test"))
+		req.Host = testHost
+		req.RemoteAddr = testLoopbackAddr
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
-			t.Errorf("request %d: expected 200, got %d", i, rr.Code)
+			t.Errorf(errFmtRequest200, i, rr.Code)
 		}
+	}
+}
+
+func TestNewHandler_OIDCVerifier(t *testing.T) {
+	cfg := &config.Config{
+		Verifiers: map[string]config.VerifierConfig{
+			"test-oidc": {
+				Type:     "oidc",
+				Issuer:   "https://accounts.example.com",
+				Audience: "myapp",
+			},
+		},
+		Routes: []config.RouteConfig{
+			{
+				Hostname:    "example.com",
+				Path:        "/hook",
+				Verifier:    "test-oidc",
+				Destination: "http://backend:8080",
+			},
+		},
+	}
+	filters := ipfilter.NewFilterSet()
+	h, err := NewHandler(cfg, filters, slog.Default(), HandlerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error building handler with oidc verifier: %v", err)
+	}
+	if h == nil {
+		t.Fatal("expected non-nil handler")
 	}
 }

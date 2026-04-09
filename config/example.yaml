@@ -76,6 +76,39 @@ verifiers:
     type: gitlab
     token: "${GITLAB_WEBHOOK_TOKEN}"
 
+  # OIDC JWT bearer token verification
+  # Supports any OIDC-compliant provider (Google, Azure AD, etc.)
+  # The jwks_uri is optional: if omitted, it is auto-discovered from the issuer's
+  # /.well-known/openid-configuration endpoint.
+  #
+  # Example: Google Chat (using project-number audience mode)
+  # Configure Google Chat app with "Authentication Audience: Project number"
+  # so downstream services can re-validate with the same audience.
+  google-chat:
+    type: oidc
+    issuer: "chat@system.gserviceaccount.com"
+    audience: "${GCP_PROJECT_NUMBER}"
+    jwks_uri: "https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com"
+
+  # Example: Google Chat (using app-url audience mode) with OIDC discovery
+  # Configure Google Chat app with "Authentication Audience: HTTP endpoint URL"
+  # The email claim is the Workspace Add-ons service account for the GCP project
+  # hosting the Chat app: service-{PROJECT_NUMBER}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com
+  google-chat-appurl:
+    type: oidc
+    issuer: "https://accounts.google.com"
+    audience: "https://hooks.example.com/googlechat"
+    # jwks_uri omitted: auto-discovered from https://accounts.google.com/.well-known/openid-configuration
+    claims:
+      email: "service-${GCP_PROJECT_NUMBER}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com"
+
+  # Example: Azure Event Grid with Azure Active Directory (AAD) authentication
+  azure-eventgrid:
+    type: oidc
+    issuer: "https://sts.windows.net/${AZURE_TENANT_ID}/"
+    audience: "${AZURE_APP_ID_URI}"
+    # jwks_uri omitted: auto-discovered from AAD tenant metadata
+
   # Shared noop verifier for testing/development
   none:
     type: noop
