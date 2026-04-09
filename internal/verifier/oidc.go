@@ -115,7 +115,7 @@ func (v *OIDCVerifier) validateClaims(payload map[string]interface{}) error {
 	for k, want := range v.requiredClaims {
 		got, _ := payload[k].(string)
 		if got != want {
-			return ErrClaimMismatch
+			return fmt.Errorf("claim %q mismatch: expected %q, got %q: %w", k, want, got, ErrClaimMismatch)
 		}
 	}
 
