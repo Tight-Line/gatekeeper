@@ -220,7 +220,12 @@ channels:
     tokenKey: RELAY_TOKEN_{PROVIDER}
     destination: "http://{internal-service}:{port}{path}"
     workers: 1  # Increase for high-volume webhooks
+    # preservePath: false  # Set if destination already contains the full path
 ```
+
+**Ask:** "Should the original webhook path be appended to the destination URL?"
+
+By default the relay appends the original webhook path to the destination (e.g., destination `http://svc:8080/app` + webhook path `/hook` → `http://svc:8080/app/hook`). Set `preservePath: false` when the destination is already the exact URL to call and appending the webhook path would break routing (e.g., destination `http://svc:8080` should stay `http://svc:8080` regardless of the incoming path).
 
 For each relay route, ensure the relay token is defined in both:
 1. gatekeeperd secrets (for webhook receipt)

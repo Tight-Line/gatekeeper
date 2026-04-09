@@ -336,6 +336,45 @@ func TestConfig_LoadAuto_EnvVarError(t *testing.T) {
 	}
 }
 
+func TestChannelConfig_GetPreservePath(t *testing.T) {
+	f := false
+	tr := true
+	tests := []struct {
+		name     string
+		channel  ChannelConfig
+		expected bool
+	}{
+		{"nil (default)", ChannelConfig{}, true},
+		{"explicit true", ChannelConfig{PreservePath: &tr}, true},
+		{"explicit false", ChannelConfig{PreservePath: &f}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.channel.GetPreservePath(); got != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestChannelConfig_GetPreservePath_YAMLRoundTrip(t *testing.T) {
+	content := `
+server: https://webhooks.example.com
+channels:
+  - name: test
+    token: token1
+    destination: http://localhost:8080
+    preserve_path: false
+`
+	cfg, err := parse([]byte(content))
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if got := cfg.Channels[0].GetPreservePath(); got != false {
+		t.Errorf("expected GetPreservePath() == false after YAML parse, got %v", got)
+	}
+}
+
 func TestChannelConfig_GetWorkers(t *testing.T) {
 	tests := []struct {
 		name    string

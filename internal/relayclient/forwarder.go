@@ -30,6 +30,7 @@ type Forwarder struct {
 	logger        *slog.Logger
 	client        *http.Client
 	debugPayloads bool
+	preservePath  bool
 }
 
 // NewForwarder creates a new forwarder for a channel
@@ -39,10 +40,16 @@ func NewForwarder(destination, channelName string, logger *slog.Logger, debugPay
 		channelName:   channelName,
 		logger:        logger,
 		debugPayloads: debugPayloads,
+		preservePath:  true,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// SetPreservePath overrides the default preserve-path behavior.
+func (f *Forwarder) SetPreservePath(v bool) {
+	f.preservePath = v
 }
 
 // Forward delivers a webhook to the local destination and returns the response
@@ -114,8 +121,10 @@ func (f *Forwarder) buildDestinationURL(webhookPath string) (string, error) {
 		return "", fmt.Errorf("parsing webhook path: %w", err)
 	}
 
-	basePath := strings.TrimSuffix(destURL.Path, "/")
-	destURL.Path = basePath + webhookURL.Path
+	if f.preservePath {
+		basePath := strings.TrimSuffix(destURL.Path, "/")
+		destURL.Path = basePath + webhookURL.Path
+	}
 
 	if destURL.RawQuery != "" && webhookURL.RawQuery != "" {
 		destURL.RawQuery = destURL.RawQuery + "&" + webhookURL.RawQuery

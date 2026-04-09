@@ -157,7 +157,12 @@ channels:
     token: "${RELAY_TOKEN_{PROVIDER}}"
     destination: "{local-destination}"
     workers: 1  # Increase for high-volume webhooks
+    # preserve_path: false  # Set if destination is the exact URL; omit to append the original webhook path
 ```
+
+**Ask:** "Should the original webhook path be appended to the destination URL?"
+
+By default the relay appends the incoming webhook path to the destination (e.g., destination `http://svc:8080/app` + webhook path `/hook` → `http://svc:8080/app/hook`). Add `preserve_path: false` when the destination is already the complete URL and path-appending would break routing.
 
 ### Step 8: Provider-Specific Setup Instructions
 
