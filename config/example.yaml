@@ -92,13 +92,15 @@ verifiers:
 
   # Example: Google Chat (using app-url audience mode) with OIDC discovery
   # Configure Google Chat app with "Authentication Audience: HTTP endpoint URL"
+  # The email claim is the Workspace Add-ons service account for the GCP project
+  # hosting the Chat app: service-{PROJECT_NUMBER}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com
   google-chat-appurl:
     type: oidc
     issuer: "https://accounts.google.com"
     audience: "https://hooks.example.com/googlechat"
     # jwks_uri omitted: auto-discovered from https://accounts.google.com/.well-known/openid-configuration
     claims:
-      email: "chat@system.gserviceaccount.com"
+      email: "service-${GCP_PROJECT_NUMBER}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com"
 
   # Example: Azure Event Grid with Azure Active Directory (AAD) authentication
   azure-eventgrid:

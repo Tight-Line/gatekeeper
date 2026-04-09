@@ -1,3 +1,8 @@
+---
+name: configure-helm
+description: Interactively configure a complete Helm deployment of gatekeeper
+---
+
 # Configure Helm Skill
 
 This skill helps users configure a complete Helm deployment of gatekeeper, including multiple routes, secrets, ingress/gateway options, TLS, and relay configuration.
@@ -57,6 +62,8 @@ Collect for each route:
 
 Track which routes use relay mode - this determines whether gatekeeper-relay is needed.
 
+**Note:** Helm values use camelCase for route fields, which differs from the native config format used by `/configure-route`. When generating Helm values, use `ipAllowlist` (not `ip_allowlist`) and `rateLimiter` (not `rate_limiter`).
+
 ### Step 3: Secrets Configuration
 
 Ask: "How will you manage secrets?"
@@ -70,6 +77,8 @@ Ask: "How will you manage secrets?"
 - Use `existingSecret` to reference a pre-created Kubernetes Secret
 - Works with External Secrets Operator, Sealed Secrets, Vault, etc.
 - Provide the secret name they'll use
+
+**Warning:** If you need to add secrets (e.g. relay tokens) to an existing install that already uses Helm-managed secrets, add the new keys under `secrets:` in the values and do NOT introduce `existingSecret`. Switching from Helm-managed to `existingSecret` causes the chart to delete its previously-managed secret during upgrade, leaving pods with no secret and failing with `CreateContainerConfigError`.
 
 Generate the secrets section based on the configured routes:
 - Signing secrets for each verifier
