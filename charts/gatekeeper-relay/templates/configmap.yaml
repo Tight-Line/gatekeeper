@@ -17,4 +17,7 @@ data:
         {{- if .workers }}
         workers: {{ .workers }}
         {{- end }}
+        {{- if hasKey . "preservePath" }}
+        preserve_path: {{ .preservePath }}
+        {{- end }}
       {{- end }}

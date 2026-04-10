@@ -22,3 +22,11 @@ channels:
   - name: github-webhooks
     token: "${RELAY_TOKEN_GITHUB}"
     destination: "http://localhost:8080/webhooks/github"
+
+  # preserve_path controls whether the original webhook path is appended to
+  # the destination URL. Default is true. Set to false when the destination
+  # URL already contains the full path and path-appending would break routing.
+  # - name: google-chat
+  #   token: "${RELAY_TOKEN_GCHAT}"
+  #   destination: "http://my-service.namespace.svc.cluster.local:8080"
+  #   preserve_path: false

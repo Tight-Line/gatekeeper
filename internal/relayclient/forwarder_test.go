@@ -589,6 +589,78 @@ func TestForwarder_DebugPayloads(t *testing.T) {
 	}
 }
 
+func TestForwarder_SetPreservePath(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	f := NewForwarder("http://localhost:8080", "test-channel", logger, false)
+
+	if !f.preservePath {
+		t.Error("expected preservePath to default to true")
+	}
+
+	f.SetPreservePath(false)
+	if f.preservePath {
+		t.Error("expected preservePath to be false after SetPreservePath(false)")
+	}
+}
+
+func TestForwarder_Forward_PreservePath_False(t *testing.T) {
+	var receivedURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedURL = r.URL.RequestURI()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	f := NewForwarder(server.URL+"/dest", "test-channel", logger, false)
+	f.SetPreservePath(false)
+
+	webhook := &Webhook{
+		ID:     "webhook-123",
+		Method: "POST",
+		Path:   "/googlechat-dev",
+		Body:   base64.StdEncoding.EncodeToString([]byte(`{}`)),
+	}
+
+	_, err := f.Forward(context.Background(), webhook)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	if receivedURL != "/dest" {
+		t.Errorf("expected URL '/dest', got %q", receivedURL)
+	}
+}
+
+func TestForwarder_Forward_PreservePath_False_QueryString(t *testing.T) {
+	var receivedURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedURL = r.URL.RequestURI()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	f := NewForwarder(server.URL+"/dest", "test-channel", logger, false)
+	f.SetPreservePath(false)
+
+	webhook := &Webhook{
+		ID:     "webhook-123",
+		Method: "POST",
+		Path:   "/googlechat-dev?foo=bar",
+		Body:   base64.StdEncoding.EncodeToString([]byte(`{}`)),
+	}
+
+	_, err := f.Forward(context.Background(), webhook)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	if receivedURL != "/dest?foo=bar" {
+		t.Errorf("expected URL '/dest?foo=bar', got %q", receivedURL)
+	}
+}
+
 func TestTruncateForLog(t *testing.T) {
 	tests := []struct {
 		name     string

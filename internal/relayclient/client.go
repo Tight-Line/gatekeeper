@@ -32,6 +32,7 @@ func NewClient(cfg *Config, logger *slog.Logger, opts ClientOptions) *Client {
 	// Create pollers for each channel
 	for _, ch := range cfg.Channels {
 		forwarder := NewForwarder(ch.Destination, ch.Name, logger, opts.DebugPayloads)
+		forwarder.SetPreservePath(ch.GetPreservePath())
 		poller := NewPoller(cfg.Server, ch.Token, ch.Name, forwarder, logger, maxFailures, ch.GetWorkers(), opts.DebugPayloads)
 		c.pollers = append(c.pollers, poller)
 	}

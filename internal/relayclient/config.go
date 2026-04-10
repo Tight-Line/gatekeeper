@@ -26,10 +26,11 @@ const DefaultWorkers = 1
 
 // ChannelConfig represents a single relay channel configuration
 type ChannelConfig struct {
-	Name        string `yaml:"name"`
-	Token       string `yaml:"token"`
-	Destination string `yaml:"destination"`
-	Workers     int    `yaml:"workers"` // Number of concurrent workers (default: 1)
+	Name         string `yaml:"name"`
+	Token        string `yaml:"token"`
+	Destination  string `yaml:"destination"`
+	Workers      int    `yaml:"workers"`                 // Number of concurrent workers (default: 1)
+	PreservePath *bool  `yaml:"preserve_path,omitempty"` // Append webhook path to destination URL (default: true)
 }
 
 // GetWorkers returns the number of workers for this channel (minimum 1)
@@ -38,6 +39,15 @@ func (c *ChannelConfig) GetWorkers() int {
 		return DefaultWorkers
 	}
 	return c.Workers
+}
+
+// GetPreservePath returns whether the webhook path should be appended to
+// the destination URL. Defaults to true (existing behavior) when not set.
+func (c *ChannelConfig) GetPreservePath() bool {
+	if c.PreservePath == nil {
+		return true
+	}
+	return *c.PreservePath
 }
 
 // Load reads and parses the configuration file
