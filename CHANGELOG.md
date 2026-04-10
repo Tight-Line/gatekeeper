@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-04-09
+
 ### Added
 - `preserve_path` channel option for relay client: when set to `false`, the relay forwarder uses the destination URL verbatim instead of appending the original webhook path. Useful when the destination already contains the full target path. Default behavior (path appending) is unchanged.
 
