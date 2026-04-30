@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11] - 2026-04-30
+
 ### Added
 - Grafana dashboard for monitoring all gatekeeperd Prometheus metrics (request rates, latency, security events, relay operations, system health)
 - Helm ConfigMap template for Grafana sidecar dashboard auto-provisioning (`grafana.dashboard.enabled`)
