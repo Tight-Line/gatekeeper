@@ -365,3 +365,19 @@ valkey:
     limits:
       cpu: 200m
       memory: 256Mi
+
+# Grafana dashboard provisioning via sidecar
+grafana:
+  dashboard:
+    enabled: false
+    sidecarLabel: grafana_dashboard
+    namespace: ""
+    labels: {}
+    annotations: {}
+
+# Prometheus Operator ServiceMonitor
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  interval: 30s
+  labels: {}

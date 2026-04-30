@@ -351,6 +351,7 @@ func (m *RedisManager) pollNewMessage(ctx context.Context, key string) (*Webhook
 		Block:    blockTimeout,
 	}).Result()
 
+	// coverage:ignore - timing edge case: XReadGroup timeout vs context cancellation race
 	if err == redis.Nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()

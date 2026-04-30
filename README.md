@@ -24,6 +24,7 @@ A webhook authentication, authorization, and validation proxy for enterprise env
 - [Planned Work](#planned-work)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Monitoring](#monitoring)
 - [Development](#development)
 - [Configuring TLS](#configuring-tls)
 - [Contributing](#contributing)
@@ -428,6 +429,18 @@ See [docs/USAGE.md](docs/USAGE.md) for detailed command-line usage:
 - Configuration file reference
 - Endpoint documentation
 - Interactive route configuration with Claude Code (`/configure-route`)
+
+---
+
+## Monitoring
+
+See [docs/MONITORING.md](docs/MONITORING.md) for:
+
+- Grafana dashboard setup (manual import or Helm sidecar provisioning)
+- Prometheus ServiceMonitor configuration
+- Complete metrics reference
+
+A pre-built dashboard is available at [`dashboards/grafana-gatekeeperd.json`](dashboards/grafana-gatekeeperd.json).
 
 ---
 
