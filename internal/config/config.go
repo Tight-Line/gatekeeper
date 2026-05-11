@@ -54,11 +54,14 @@ type RateLimiterConfig struct {
 
 // VerifierConfig defines a webhook signature verifier
 type VerifierConfig struct {
-	Type string `yaml:"type"` // slack, github, gitlab, shopify, api_key, hmac, json_field, query_param, header_query_param, oidc, noop
+	Type string `yaml:"type"` // slack, github, gitlab, shopify, sendgrid, api_key, hmac, json_field, query_param, header_query_param, oidc, noop
 
-	// For slack verifier
+	// For slack and sendgrid verifiers
 	SigningSecret   string        `yaml:"signing_secret,omitempty"`
 	MaxTimestampAge time.Duration `yaml:"max_timestamp_age,omitempty"`
+
+	// For sendgrid verifier (PEM-encoded or base64-encoded DER ECDSA P-256 public key)
+	PublicKey string `yaml:"public_key,omitempty"`
 
 	// For api_key verifier
 	Header string `yaml:"header,omitempty"`
@@ -264,6 +267,10 @@ func validateVerifier(name string, v VerifierConfig) error {
 	case "gitlab":
 		if v.Token == "" {
 			return fmt.Errorf("verifier %q: token is required for gitlab verifier", name)
+		}
+	case "sendgrid":
+		if v.PublicKey == "" {
+			return fmt.Errorf("verifier %q: public_key is required for sendgrid verifier", name)
 		}
 	case "api_key":
 		return validateAPIKeyVerifier(name, v)

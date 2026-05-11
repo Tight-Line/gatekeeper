@@ -135,6 +135,8 @@ func buildVerifier(vc config.VerifierConfig) (verifier.Verifier, error) {
 		return verifier.NewGitLabVerifier(vc.Token), nil
 	case "shopify":
 		return verifier.NewShopifyVerifier(vc.Secret), nil
+	case "sendgrid":
+		return verifier.NewSendGridVerifier(vc.PublicKey, vc.MaxTimestampAge)
 	case "api_key":
 		return verifier.NewAPIKeyVerifier(vc.Header, vc.Token), nil
 	case "hmac":

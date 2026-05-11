@@ -3,9 +3,13 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -2364,6 +2368,55 @@ func TestHandler_SlackURLVerification_Relay(t *testing.T) {
 	}
 	if rr.Body.String() != "relay-test-challenge" {
 		t.Errorf("expected body 'relay-test-challenge', got %q", rr.Body.String())
+	}
+}
+
+func generateSendGridTestPublicKey(t *testing.T) string {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal pkix: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(der)
+}
+
+func TestHandler_SendGridVerifierBuilds(t *testing.T) {
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
+		},
+		Verifiers: map[string]config.VerifierConfig{
+			"sendgrid": {Type: "sendgrid", PublicKey: generateSendGridTestPublicKey(t)},
+		},
+	}
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler, err := NewHandler(cfg, filters, logger, HandlerOptions{})
+	if err != nil {
+		t.Fatalf(errFmtHandler, err)
+	}
+	if handler.verifierTypes["sendgrid"] != "sendgrid" {
+		t.Errorf("expected verifierTypes['sendgrid']='sendgrid', got %q", handler.verifierTypes["sendgrid"])
+	}
+}
+
+func TestHandler_SendGridVerifierBuildError(t *testing.T) {
+	cfg := &config.Config{
+		Routes: []config.RouteConfig{
+			{Hostname: testHost, Path: "/", Destination: testBackendURL},
+		},
+		Verifiers: map[string]config.VerifierConfig{
+			"sendgrid": {Type: "sendgrid", PublicKey: "not-a-valid-key"},
+		},
+	}
+	filters := ipfilter.NewFilterSet()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if _, err := NewHandler(cfg, filters, logger, HandlerOptions{}); err == nil {
+		t.Fatal("expected error from invalid sendgrid public key, got nil")
 	}
 }
 

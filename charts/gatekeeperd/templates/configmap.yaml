@@ -46,6 +46,11 @@ data:
         secret: ${{ "{" }}{{ $verifier.secretKey }}{{ "}" }}
         {{- else if eq $verifier.type "shopify" }}
         secret: ${{ "{" }}{{ $verifier.secretKey }}{{ "}" }}
+        {{- else if eq $verifier.type "sendgrid" }}
+        public_key: ${{ "{" }}{{ $verifier.publicKeyKey }}{{ "}" }}
+        {{- if $verifier.maxTimestampAge }}
+        max_timestamp_age: {{ $verifier.maxTimestampAge }}
+        {{- end }}
         {{- else if eq $verifier.type "api_key" }}
         header: {{ $verifier.header | quote }}
         token: ${{ "{" }}{{ $verifier.tokenKey }}{{ "}" }}

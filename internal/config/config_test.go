@@ -994,6 +994,21 @@ func TestValidate_GitLabVerifierRequiresToken(t *testing.T) {
 	}
 }
 
+func TestValidate_SendGridVerifierRequiresPublicKey(t *testing.T) {
+	cfg := &Config{
+		Verifiers: map[string]VerifierConfig{
+			"test": {
+				Type: "sendgrid",
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for sendgrid verifier without public_key")
+	}
+}
+
 func TestValidate_RateLimiter_MissingTotalRPS(t *testing.T) {
 	cfg := &Config{
 		RateLimiters: map[string]RateLimiterConfig{

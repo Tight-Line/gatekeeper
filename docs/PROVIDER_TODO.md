@@ -12,6 +12,7 @@ Webhook providers we want to support in the future. Contributions welcome.
 | Shopify | E-commerce | `shopify` |
 | Google Calendar | Productivity | `api_key` |
 | Google Chat | Communication | `oidc` |
+| SendGrid | Email | `sendgrid` |
 | Generic HMAC | Any | `hmac` |
 | Generic API Key | Any | `api_key` |
 
@@ -23,7 +24,6 @@ Well-documented APIs with straightforward signature schemes.
 |----------|----------|------------------|------|
 | Stripe | Payments | HMAC-SHA256 with timestamp | [link](https://stripe.com/docs/webhooks/signatures) |
 | Twilio | Communication | HMAC-SHA1 of URL + params | [link](https://www.twilio.com/docs/usage/webhooks/webhooks-security) |
-| SendGrid | Email | ECDSA signature | [link](https://docs.sendgrid.com/for-developers/tracking-events/getting-started-event-webhook-security-features) |
 | PagerDuty | Ops | HMAC-SHA256 | [link](https://developer.pagerduty.com/docs/webhooks/v3-overview/) |
 | Linear | Project Mgmt | HMAC-SHA256 | [link](https://developers.linear.app/docs/graphql/webhooks) |
 | Discord | Communication | Ed25519 signature | [link](https://discord.com/developers/docs/interactions/receiving-and-responding) |
