@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-06-11
+
 ### Added
 - `sendgrid` verifier type for SendGrid Event Webhook authentication. Verifies the ECDSA P-256 signature in `X-Twilio-Email-Event-Webhook-Signature` over `timestamp + payload`, with optional `max_timestamp_age` replay protection. The public key may be supplied as PEM or as the base64-encoded DER shown in the SendGrid UI.
 
