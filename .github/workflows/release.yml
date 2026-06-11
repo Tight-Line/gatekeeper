@@ -41,6 +41,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.VERSION }}
           tags: |
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:${{ steps.meta.outputs.VERSION }}
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:latest
@@ -52,6 +54,8 @@ jobs:
           context: .
           file: ./Dockerfile.relay
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.VERSION }}
           tags: |
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:${{ steps.meta.outputs.VERSION }}
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:latest
@@ -64,6 +68,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.VERSION }}
           tags: |
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:${{ steps.meta.outputs.VERSION }}
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:latest
@@ -75,6 +81,8 @@ jobs:
           context: .
           file: ./Dockerfile.relay
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.VERSION }}
           tags: |
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:${{ steps.meta.outputs.VERSION }}
             ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:latest

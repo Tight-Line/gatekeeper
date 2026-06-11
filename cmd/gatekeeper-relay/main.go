@@ -15,7 +15,9 @@ import (
 	"github.com/tight-line/gatekeeper/internal/relayclient"
 )
 
-var version = "0.1.0"
+// version is set at link time via -ldflags "-X main.version=...".
+// See Dockerfile.relay (ARG VERSION) and the release / pr-images workflows.
+var version = "dev"
 
 func main() {
 	if err := run(); err != nil {

@@ -23,7 +23,9 @@ import (
 	"github.com/tight-line/gatekeeper/internal/server"
 )
 
-var version = "0.1.0"
+// version is set at link time via -ldflags "-X main.version=...".
+// See Dockerfile (ARG VERSION) and the release / pr-images workflows.
+var version = "dev"
 
 func main() {
 	if err := run(); err != nil {

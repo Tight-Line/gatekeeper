@@ -44,6 +44,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.TAG }}
           tags: ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:${{ steps.meta.outputs.TAG }}
           platforms: linux/amd64
           cache-from: type=gha
@@ -55,6 +57,8 @@ jobs:
           context: .
           file: ./Dockerfile.relay
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.TAG }}
           tags: ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:${{ steps.meta.outputs.TAG }}
           platforms: linux/amd64
           cache-from: type=gha
@@ -67,6 +71,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.TAG }}
           tags: ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeperd:${{ steps.meta.outputs.TAG }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
@@ -78,6 +84,8 @@ jobs:
           context: .
           file: ./Dockerfile.relay
           push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.TAG }}
           tags: ${{ steps.meta.outputs.IMAGE_PREFIX }}/gatekeeper-relay:${{ steps.meta.outputs.TAG }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
