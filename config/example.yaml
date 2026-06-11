@@ -76,6 +76,16 @@ verifiers:
     type: gitlab
     token: "${GITLAB_WEBHOOK_TOKEN}"
 
+  # SendGrid Event Webhook verification (ECDSA P-256 signature).
+  # public_key may be PEM or the base64-encoded DER shown in the SendGrid UI.
+  # max_timestamp_age enables replay protection; omit or set to 0 to disable.
+  # SendGrid does not publish stable IP ranges, so routes typically have no
+  # ip_allowlist and rely on signature verification.
+  example-sendgrid:
+    type: sendgrid
+    public_key: "${SENDGRID_WEBHOOK_PUBLIC_KEY}"
+    max_timestamp_age: 5m
+
   # OIDC JWT bearer token verification
   # Supports any OIDC-compliant provider (Google, Azure AD, etc.)
   # The jwks_uri is optional: if omitted, it is auto-discovered from the issuer's

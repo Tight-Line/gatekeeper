@@ -268,6 +268,26 @@ verifiers:
     secret: "${SHOPIFY_WEBHOOK_SECRET}"
 ```
 
+#### SendGrid (Event Webhook / Inbound Parse)
+
+SendGrid signs Event Webhook deliveries with ECDSA P-256. The signed content is `timestamp + raw_body`, the signature header carries the base64-encoded ASN.1 DER signature, and the timestamp travels in a sibling header.
+
+1. In the SendGrid app, enable signature verification under **Settings -> Mail Settings -> Event Webhook -> Signed Event Webhook Requests**
+2. Copy the displayed public verification key (base64-encoded DER) or convert it to PEM
+3. Set the environment variable: `export SENDGRID_WEBHOOK_PUBLIC_KEY="MFkwEwYHKoZIzj0CAQYI..."`
+4. Point the Event Webhook URL at: `https://{hostname}{path}`
+
+Configuration uses:
+```yaml
+verifiers:
+  sendgrid:
+    type: sendgrid
+    public_key: "${SENDGRID_WEBHOOK_PUBLIC_KEY}"
+    max_timestamp_age: 5m  # optional replay-protection window; omit/0 disables
+```
+
+IP allowlist: SendGrid does **not** publish stable IP ranges for Event Webhook or Inbound Parse traffic, so omit `ip_allowlist` and rely on signature verification.
+
 #### Google Calendar
 
 1. Use the Google Calendar API to create a watch request
