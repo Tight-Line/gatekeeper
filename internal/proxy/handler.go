@@ -26,7 +26,10 @@ import (
 	"github.com/tight-line/gatekeeper/internal/verifier"
 )
 
-const errInternalServerError = "Internal Server Error"
+const (
+	errInternalServerError = "Internal Server Error"
+	contentTypePlainText   = "text/plain"
+)
 
 // HandlerOptions configures the proxy handler
 type HandlerOptions struct {
@@ -407,7 +410,7 @@ func (h *Handler) handleSlackURLVerification(w http.ResponseWriter, r *http.Requ
 		"path", r.URL.Path,
 	)
 
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", contentTypePlainText)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(req.Challenge))
 
@@ -450,7 +453,7 @@ func (h *Handler) handleMicrosoftGraphValidation(w http.ResponseWriter, r *http.
 		"path", r.URL.Path,
 	)
 
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", contentTypePlainText)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(validationToken))
 
@@ -744,36 +747,32 @@ func categorizeVerificationError(err error) string {
 // skipping any private/internal IPs to find the real public client IP.
 // If trustXForwardedFor is false, it only uses RemoteAddr.
 func (h *Handler) getClientIP(r *http.Request) string {
-	// Only check X-Forwarded-For if explicitly trusted
 	if h.trustXForwardedFor {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-			// Walk through from left to right, skipping private/internal IPs
-			for _, part := range strings.Split(xff, ",") {
-				ip := strings.TrimSpace(part)
-				if ip == "" {
-					continue
-				}
-				// Skip private/internal IPs - these are intermediate proxies
-				if !isPrivateIP(ip) {
-					return ip
-				}
-			}
-			// If all IPs are private (e.g., internal network testing), return the leftmost
-			if idx := strings.Index(xff, ","); idx != -1 {
-				return strings.TrimSpace(xff[:idx])
-			}
-			return strings.TrimSpace(xff)
+			return firstPublicIPFromXFF(xff)
 		}
 	}
-
-	// Use RemoteAddr (strip port if present)
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		// RemoteAddr might not have a port
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// firstPublicIPFromXFF walks the X-Forwarded-For value left-to-right and
+// returns the first non-private IP. If all IPs are private it returns the
+// leftmost entry (the original client on an internal network).
+func firstPublicIPFromXFF(xff string) string {
+	for _, part := range strings.Split(xff, ",") {
+		ip := strings.TrimSpace(part)
+		if ip != "" && !isPrivateIP(ip) {
+			return ip
+		}
+	}
+	if idx := strings.Index(xff, ","); idx != -1 {
+		return strings.TrimSpace(xff[:idx])
+	}
+	return strings.TrimSpace(xff)
 }
 
 // isPrivateIP checks if an IP address is private/internal (RFC 1918, loopback, link-local, etc.)

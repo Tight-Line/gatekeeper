@@ -376,6 +376,19 @@ func TestForwarder_Forward_MergesQueryParams(t *testing.T) {
 	}
 }
 
+func assertHostHeaders(t *testing.T, expectedHost, receivedHost string, shouldStripHdrs bool, preserveHeader, originalHostHeader string) {
+	t.Helper()
+	if expectedHost != "" && receivedHost != expectedHost {
+		t.Errorf("expected Host %q, got %q", expectedHost, receivedHost)
+	}
+	if shouldStripHdrs && preserveHeader != "" {
+		t.Errorf("expected X-Gatekeeperd-Preserve-Host to be stripped, got %q", preserveHeader)
+	}
+	if shouldStripHdrs && originalHostHeader != "" {
+		t.Errorf("expected X-Gatekeeperd-Original-Host to be stripped, got %q", originalHostHeader)
+	}
+}
+
 func TestForwarder_Forward_PreserveHost(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -447,22 +460,7 @@ func TestForwarder_Forward_PreserveHost(t *testing.T) {
 				t.Fatalf("Forward failed: %v", err)
 			}
 
-			// Check Host header
-			if tc.expectedHost != "" {
-				if receivedHost != tc.expectedHost {
-					t.Errorf("expected Host %q, got %q", tc.expectedHost, receivedHost)
-				}
-			}
-
-			// Check that internal headers were stripped
-			if tc.shouldStripHdrs {
-				if receivedPreserveHeader != "" {
-					t.Errorf("expected X-Gatekeeperd-Preserve-Host to be stripped, got %q", receivedPreserveHeader)
-				}
-				if receivedOriginalHostHeader != "" {
-					t.Errorf("expected X-Gatekeeperd-Original-Host to be stripped, got %q", receivedOriginalHostHeader)
-				}
-			}
+			assertHostHeaders(t, tc.expectedHost, receivedHost, tc.shouldStripHdrs, receivedPreserveHeader, receivedOriginalHostHeader)
 		})
 	}
 }

@@ -3,6 +3,7 @@ package verifier
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -298,21 +299,8 @@ func TestExtractJSONPath(t *testing.T) {
 				return
 			}
 
-			// Compare values (handle map comparison)
-			switch want := tt.want.(type) {
-			case map[string]any:
-				gotMap, ok := got.(map[string]any)
-				if !ok {
-					t.Errorf("got %T, want map[string]any", got)
-					return
-				}
-				if len(gotMap) != len(want) {
-					t.Errorf("got map len %d, want %d", len(gotMap), len(want))
-				}
-			default:
-				if got != want {
-					t.Errorf("got %v, want %v", got, want)
-				}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}

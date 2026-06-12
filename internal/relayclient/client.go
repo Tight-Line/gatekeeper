@@ -33,7 +33,11 @@ func NewClient(cfg *Config, logger *slog.Logger, opts ClientOptions) *Client {
 	for _, ch := range cfg.Channels {
 		forwarder := NewForwarder(ch.Destination, ch.Name, logger, opts.DebugPayloads)
 		forwarder.SetPreservePath(ch.GetPreservePath())
-		poller := NewPoller(cfg.Server, ch.Token, ch.Name, forwarder, logger, maxFailures, ch.GetWorkers(), opts.DebugPayloads)
+		poller := NewPoller(cfg.Server, ch.Token, ch.Name, forwarder, logger, PollerConfig{
+			MaxConsecutiveFailures: maxFailures,
+			Workers:                ch.GetWorkers(),
+			DebugPayloads:          opts.DebugPayloads,
+		})
 		c.pollers = append(c.pollers, poller)
 	}
 
