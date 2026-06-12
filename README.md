@@ -417,7 +417,18 @@ See [docs/PROVIDER_TODO.md](docs/PROVIDER_TODO.md) for the list of webhook provi
 
 ## Installation
 
-See [docs/INSTALL.md](docs/INSTALL.md) for installation options:
+**Kubernetes / Helm quick-start:**
+
+```bash
+helm repo add gatekeeper https://tight-line.github.io/gatekeeper
+helm repo update
+helm install gatekeeperd gatekeeper/gatekeeperd -f your-values.yaml
+
+# Optional: relay client (deploy inside your private network)
+helm install gatekeeper-relay gatekeeper/gatekeeper-relay -f your-relay-values.yaml
+```
+
+See [docs/INSTALL.md](docs/INSTALL.md) for all installation options:
 
 - Docker images from GitHub Container Registry
 - Helm charts for Kubernetes
