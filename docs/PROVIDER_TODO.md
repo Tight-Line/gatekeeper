@@ -12,9 +12,13 @@ Webhook providers we want to support in the future. Contributions welcome.
 | Shopify | E-commerce | `shopify` |
 | Google Calendar | Productivity | `api_key` |
 | Google Chat | Communication | `oidc` |
+| Azure Event Grid (AAD) | Cloud | `oidc` |
+| Microsoft Graph | Productivity | `json_field` |
 | SendGrid | Email | `sendgrid` |
 | Generic HMAC | Any | `hmac` |
 | Generic API Key | Any | `api_key` |
+| Generic Query Param | Any | `query_param` |
+| Generic Header Query Param | Any | `header_query_param` |
 
 ## Priority 1: High Demand
 
