@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.13] - 2026-06-11
+
 ### Changed
 - Reduced SonarQube cognitive complexity in `validateRoute`, `getClientIP`, `TestExtractJSONPath`, and `TestForwarder_Forward_PreserveHost` by extracting helper functions
 - Replaced duplicated `"text/plain"` content-type literal with a named constant
