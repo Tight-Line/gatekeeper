@@ -268,7 +268,7 @@ verifiers:
     secret: "${SHOPIFY_WEBHOOK_SECRET}"
 ```
 
-#### SendGrid (Event Webhook / Inbound Parse)
+#### SendGrid Event Webhook
 
 SendGrid signs Event Webhook deliveries with ECDSA P-256. The signed content is `timestamp + raw_body`, the signature header carries the base64-encoded ASN.1 DER signature, and the timestamp travels in a sibling header.
 
@@ -286,7 +286,7 @@ verifiers:
     max_timestamp_age: 5m  # optional replay-protection window; omit/0 disables
 ```
 
-IP allowlist: SendGrid does **not** publish stable IP ranges for Event Webhook or Inbound Parse traffic, so omit `ip_allowlist` and rely on signature verification.
+IP allowlist: SendGrid does **not** publish stable IP ranges for Event Webhook traffic, so omit `ip_allowlist` and rely on signature verification.
 
 #### Google Calendar
 
