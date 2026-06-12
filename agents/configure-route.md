@@ -24,8 +24,11 @@ Ask which webhook provider they want to configure. Offer these options:
 - **GitHub** - Repository webhooks, organization webhooks
 - **GitLab** - Repository/project webhooks, group webhooks
 - **Shopify** - Store webhooks (orders, products, customers)
+- **SendGrid** - Event Webhook (email delivery/engagement events)
 - **Google Calendar** - Calendar push notifications (X-Goog-Channel-Token header)
+- **Google Chat** - Chat app webhooks (OIDC JWT bearer token)
 - **Microsoft Graph** - Outlook Calendar, OneDrive change notifications (token in JSON body)
+- **Azure Event Grid (AAD)** - Azure Event Grid with Azure Active Directory authentication
 - **Generic HMAC** - Any provider using HMAC signatures (configurable algorithm/encoding)
 - **API Key (Header)** - Providers using simple header token authentication
 - **Query Parameter Token** - Providers that send a token in the URL query string
@@ -348,6 +351,68 @@ ip_allowlists:
       - "20.231.128.0/19"
       - "40.126.0.0/18"
 ```
+
+#### Google Chat
+
+Google Chat signs webhook requests with an RS256 JWT bearer token. There are two audience modes; ask the user which one their Chat app is configured to use.
+
+**App URL audience mode** (recommended for new apps):
+
+1. In the Google Cloud Console, configure the Chat app with **Authentication Audience: HTTP endpoint URL**
+2. Set the environment variables:
+   - `export GCP_PROJECT_NUMBER="your-project-number"`
+   - The audience is the exact webhook URL: `https://{hostname}{path}`
+
+Configuration uses:
+```yaml
+verifiers:
+  google-chat:
+    type: oidc
+    issuer: "https://accounts.google.com"
+    audience: "https://{hostname}{path}"
+    # jwks_uri omitted: auto-discovered from Google OIDC discovery document
+    claims:
+      email: "service-${GCP_PROJECT_NUMBER}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com"
+```
+
+**Project number audience mode** (legacy):
+
+1. Configure the Chat app with **Authentication Audience: Project number**
+2. Set the environment variable: `export GCP_PROJECT_NUMBER="your-project-number"`
+
+Configuration uses:
+```yaml
+verifiers:
+  google-chat:
+    type: oidc
+    issuer: "chat@system.gserviceaccount.com"
+    audience: "${GCP_PROJECT_NUMBER}"
+    jwks_uri: "https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com"
+```
+
+IP allowlist: Google Chat does not publish stable webhook source IPs; rely on JWT signature verification.
+
+#### Azure Event Grid (AAD)
+
+Azure Event Grid can deliver webhooks with Azure Active Directory (AAD) authentication. Gatekeeper verifies the RS256 JWT bearer token issued by your AAD tenant.
+
+1. Configure Event Grid to use AAD authentication, specifying your app registration as the target audience
+2. Set the environment variables:
+   - `export AZURE_TENANT_ID="your-tenant-id"`
+   - `export AZURE_APP_ID_URI="api://your-app-id"` (the audience value you registered)
+3. Set the Event Grid subscription endpoint to: `https://{hostname}{path}`
+
+Configuration uses:
+```yaml
+verifiers:
+  azure-eventgrid:
+    type: oidc
+    issuer: "https://sts.windows.net/${AZURE_TENANT_ID}/"
+    audience: "${AZURE_APP_ID_URI}"
+    # jwks_uri omitted: auto-discovered from AAD tenant metadata
+```
+
+IP allowlist: Azure publishes IP ranges but they are large and change frequently; rely on JWT signature verification.
 
 #### Generic HMAC
 

@@ -194,6 +194,49 @@ The verifier auto-parses JSON strings when needed. For example, if `clientState`
 
 **Note:** Gatekeeper automatically handles Microsoft Graph subscription validation. When creating or renewing a subscription, Graph sends a validation request with `validationToken` as a query parameter. Gatekeeper detects this on `json_field` verifier routes and responds immediately with the token value, bypassing verification (since validation requests have empty bodies). This works in both direct and relay modes.
 
+**GitLab (`type: gitlab`):**
+```yaml
+verifiers:
+  my-gitlab:
+    type: gitlab
+    token: "${GITLAB_WEBHOOK_TOKEN}"
+```
+
+**OIDC (`type: oidc`):**
+
+Verifies RS256 JWT bearer tokens from any OIDC-compliant provider. Used for Google Chat and Azure Event Grid (AAD). The `jwks_uri` is optional; if omitted it is auto-discovered from the issuer's `/.well-known/openid-configuration` endpoint. The optional `claims` map enforces additional JWT payload fields.
+```yaml
+verifiers:
+  google-chat:
+    type: oidc
+    issuer: "https://accounts.google.com"
+    audience: "https://hooks.example.com/googlechat"
+    # jwks_uri omitted: auto-discovered from OIDC discovery document
+    claims:
+      email: "service-${GCP_PROJECT_NUMBER}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com"  # optional
+```
+
+**Query Parameter (`type: query_param`):**
+```yaml
+verifiers:
+  url-token:
+    type: query_param
+    name: "token"                 # URL query parameter name
+    token: "${WEBHOOK_URL_TOKEN}"
+```
+
+**Header Query Param (`type: header_query_param`):**
+
+For headers that encode multiple key=value pairs as a query string (e.g., `X-Custom: key=val&key2=val2`).
+```yaml
+verifiers:
+  header-param:
+    type: header_query_param
+    header: "X-Custom-Header"    # header to inspect
+    name: "secret"               # key to extract from the encoded value
+    token: "${CHANNEL_SECRET}"
+```
+
 **Noop (`type: noop`):**
 ```yaml
 verifiers:
@@ -462,8 +505,12 @@ After gathering this information, it generates complete configuration for gateke
 |----------|---------------|-------|
 | Slack | `slack` | HMAC-SHA256 with replay protection. URL verification handled automatically. |
 | GitHub | `github` | HMAC-SHA256 |
+| GitLab | `gitlab` | X-Gitlab-Token header comparison |
 | Shopify | `shopify` | HMAC-SHA256 base64 |
+| SendGrid Event Webhook | `sendgrid` | ECDSA P-256 signature |
 | Google Calendar | `api_key` | X-Goog-Channel-Token header |
+| Google Chat | `oidc` | RS256 JWT bearer token |
+| Azure Event Grid (AAD) | `oidc` | RS256 JWT bearer token |
 | Microsoft Graph | `json_field` | Token embedded in JSON body |
 | Generic HMAC | `hmac` | Configurable algorithm (SHA256/SHA512) and encoding (hex/base64) |
 | API Key | `api_key` | Simple header token |

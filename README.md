@@ -149,10 +149,15 @@ Supported verifier types:
 |------|----------|-----------|
 | `slack` | Slack | HMAC-SHA256 of "v0:{timestamp}:{body}" with replay protection |
 | `github` | GitHub | HMAC-SHA256 of body, hex encoded |
+| `gitlab` | GitLab | X-Gitlab-Token header comparison |
 | `shopify` | Shopify | HMAC-SHA256 of body, base64 encoded |
 | `sendgrid` | SendGrid Event Webhook | ECDSA P-256 over timestamp+body with replay protection |
+| `oidc` | Google Chat, Azure AD, etc. | RS256 JWT bearer token with JWKS auto-discovery |
 | `hmac` | Generic | Configurable HMAC (SHA256/SHA512, hex/base64) |
 | `api_key` | Google Calendar, etc. | Header token comparison |
+| `json_field` | Microsoft Graph, etc. | Token at dot-notation path in JSON body |
+| `query_param` | Generic | Token in URL query parameter |
+| `header_query_param` | Generic | Key=value pair extracted from a request header |
 | `noop` | Testing | Always succeeds (testing only) |
 
 #### Payload Schema Validation
