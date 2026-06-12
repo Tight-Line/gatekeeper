@@ -141,6 +141,17 @@ verifiers:
     secret: "${SHOPIFY_WEBHOOK_SECRET}"
 ```
 
+**SendGrid Event Webhook (`type: sendgrid`):**
+
+Verifies SendGrid's [Event Webhook](https://docs.sendgrid.com/for-developers/tracking-events/getting-started-event-webhook-security-features) using ECDSA P-256. Does not support SendGrid Inbound Parse webhooks (those carry no signature).
+```yaml
+verifiers:
+  my-sendgrid:
+    type: sendgrid
+    public_key: "${SENDGRID_WEBHOOK_PUBLIC_KEY}"  # PEM or base64-encoded DER from the SendGrid dashboard
+    max_timestamp_age: 5m  # optional; omit or set to 0 to disable replay protection
+```
+
 **Generic HMAC (`type: hmac`):**
 ```yaml
 verifiers:

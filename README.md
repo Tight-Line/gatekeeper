@@ -150,6 +150,7 @@ Supported verifier types:
 | `slack` | Slack | HMAC-SHA256 of "v0:{timestamp}:{body}" with replay protection |
 | `github` | GitHub | HMAC-SHA256 of body, hex encoded |
 | `shopify` | Shopify | HMAC-SHA256 of body, base64 encoded |
+| `sendgrid` | SendGrid Event Webhook | ECDSA P-256 over timestamp+body with replay protection |
 | `hmac` | Generic | Configurable HMAC (SHA256/SHA512, hex/base64) |
 | `api_key` | Google Calendar, etc. | Header token comparison |
 | `noop` | Testing | Always succeeds (testing only) |
