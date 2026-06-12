@@ -2,6 +2,25 @@ apiVersion: v1
 entries:
   gatekeeper-relay:
   - apiVersion: v2
+    appVersion: 0.2.13
+    created: "2026-06-12T03:56:57.038157169Z"
+    description: Relay client for gatekeeper that enables webhook delivery to private
+      networks
+    digest: 4a6659b784281cc721bbdc66d9916e90b04697bd75df5313354f866f41b0334c
+    keywords:
+    - webhook
+    - relay
+    - proxy
+    - private-network
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeper-relay
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.2.13/gatekeeper-relay-0.2.13.tgz
+    version: 0.2.13
+  - apiVersion: v2
     appVersion: 0.2.12
     created: "2026-06-11T21:16:23.299959649Z"
     description: Relay client for gatekeeper that enables webhook delivery to private
@@ -420,6 +439,32 @@ entries:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeper-relay-0.1.0/gatekeeper-relay-0.1.0.tgz
     version: 0.1.0
   gatekeeperd:
+  - apiVersion: v2
+    appVersion: 0.2.13
+    created: "2026-06-12T03:56:57.232776621Z"
+    dependencies:
+    - condition: redis.enabled,redis.bundled
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: ~0.9
+    description: Webhook authentication proxy server for validating and forwarding
+      webhooks
+    digest: c57e0b1b2d40f4f999b4e7563386bf03f9496c114e412aa3518d8683cb8f23d8
+    keywords:
+    - webhook
+    - proxy
+    - authentication
+    - slack
+    - github
+    - relay
+    maintainers:
+    - email: certs@example.com
+      name: Tight Line
+    name: gatekeeperd
+    type: application
+    urls:
+    - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.2.13/gatekeeperd-0.2.13.tgz
+    version: 0.2.13
   - apiVersion: v2
     appVersion: 0.2.12
     created: "2026-06-11T21:16:23.551177607Z"
@@ -942,4 +987,4 @@ entries:
     urls:
     - https://github.com/Tight-Line/gatekeeper/releases/download/gatekeeperd-0.1.0/gatekeeperd-0.1.0.tgz
     version: 0.1.0
-generated: "2026-06-11T21:16:23.551412436Z"
+generated: "2026-06-12T03:56:57.23295552Z"
