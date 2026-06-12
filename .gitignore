@@ -19,3 +19,4 @@ config/*
 !config/minikube-gatekeeperd.yaml
 !config/minikube-relay.yaml
 !config/test*.yaml
+asterix_story_log.json

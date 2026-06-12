@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Reduced SonarQube cognitive complexity in `validateRoute`, `getClientIP`, `TestExtractJSONPath`, and `TestForwarder_Forward_PreserveHost` by extracting helper functions
+- Replaced duplicated `"text/plain"` content-type literal with a named constant
+- Refactored `NewPoller` to accept a `PollerConfig` struct instead of 8 positional parameters
+- CI lint step now uses the official `golangci/golangci-lint-action` instead of `go install`, eliminating the unpinned-dependency security warning
+
 ## [0.2.12] - 2026-06-11
 
 ### Added

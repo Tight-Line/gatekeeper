@@ -55,8 +55,16 @@ type Poller struct {
 	debugPayloads bool
 }
 
+// PollerConfig holds configuration options for a Poller.
+type PollerConfig struct {
+	MaxConsecutiveFailures int
+	Workers                int
+	DebugPayloads          bool
+}
+
 // NewPoller creates a new poller for a channel
-func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logger *slog.Logger, maxConsecutiveFailures, workers int, debugPayloads bool) *Poller {
+func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logger *slog.Logger, cfg PollerConfig) *Poller {
+	workers := cfg.Workers
 	if workers <= 0 {
 		workers = 1
 	}
@@ -66,9 +74,9 @@ func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logge
 		channelName:            channelName,
 		forwarder:              forwarder,
 		logger:                 logger,
-		maxConsecutiveFailures: maxConsecutiveFailures,
+		maxConsecutiveFailures: cfg.MaxConsecutiveFailures,
 		workers:                workers,
-		debugPayloads:          debugPayloads,
+		debugPayloads:          cfg.DebugPayloads,
 		client: &http.Client{
 			Timeout: 60 * time.Second, // Longer than server poll timeout
 		},

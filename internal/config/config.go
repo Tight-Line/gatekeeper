@@ -220,6 +220,11 @@ func (c *Config) validateRoute(i int, route RouteConfig) error {
 	if route.Destination != "" && route.RelayToken != "" {
 		return fmt.Errorf("route %d: destination and relay_token are mutually exclusive", i)
 	}
+	return c.validateRouteDependencies(i, route)
+}
+
+// validateRouteDependencies checks that named resources referenced by a route exist.
+func (c *Config) validateRouteDependencies(i int, route RouteConfig) error {
 	if route.IPAllowlist != "" {
 		if _, ok := c.IPAllowlists[route.IPAllowlist]; !ok {
 			return fmt.Errorf("route %d: ip_allowlist %q not found", i, route.IPAllowlist)
