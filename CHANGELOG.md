@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Relay recovery loop could not reclaim stuck messages after a pod restart because `DefaultWebhookExpiry` (30s) was shorter than `pendingIdleTimeout` (60s). Fixed by raising `DefaultWebhookExpiry` to 2 minutes and lowering `pendingIdleTimeout` to 30s, ensuring the recovery loop always has time to reclaim a stuck message before it expires.
+
 ## [0.2.13] - 2026-06-11
 
 ### Changed
