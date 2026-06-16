@@ -17,8 +17,10 @@ var (
 )
 
 const (
-	// DefaultWebhookExpiry is the default time after which a queued webhook expires
-	DefaultWebhookExpiry = 30 * time.Second
+	// DefaultWebhookExpiry is the default time after which a queued webhook expires.
+	// Must be greater than pendingIdleTimeout + defaultRecoveryInterval so that the
+	// recovery loop can reclaim stuck messages before they expire.
+	DefaultWebhookExpiry = 2 * time.Minute
 )
 
 // Webhook represents a webhook request to be delivered via relay
