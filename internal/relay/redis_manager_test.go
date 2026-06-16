@@ -908,9 +908,9 @@ func TestRedisManager_Deliver_SetsExpiry(t *testing.T) {
 		if webhook.ExpiresAt == 0 {
 			t.Error("expected ExpiresAt to be set")
 		}
-		// Should be about 30 seconds in the future
-		expectedMin := time.Now().Add(25 * time.Second).Unix()
-		expectedMax := time.Now().Add(35 * time.Second).Unix()
+		// Should be about 2 minutes in the future
+		expectedMin := time.Now().Add(115 * time.Second).Unix()
+		expectedMax := time.Now().Add(125 * time.Second).Unix()
 		if webhook.ExpiresAt < expectedMin || webhook.ExpiresAt > expectedMax {
 			t.Errorf("ExpiresAt %d not in expected range [%d, %d]", webhook.ExpiresAt, expectedMin, expectedMax)
 		}

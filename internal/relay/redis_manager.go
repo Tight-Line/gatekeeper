@@ -35,7 +35,7 @@ const (
 
 	// Recovery settings
 	defaultRecoveryInterval = 30 * time.Second // How often to check for stuck messages
-	pendingIdleTimeout      = 60 * time.Second // How long a message can be pending before reclaim
+	pendingIdleTimeout      = 30 * time.Second // How long a message can be pending before reclaim
 	maxDeliveryAttempts     = 3                // Max retries before dead letter
 )
 
