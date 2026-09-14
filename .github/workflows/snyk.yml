@@ -8,27 +8,55 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Weekly Monday 6am UTC
 
+permissions:
+  contents: read
+
 jobs:
   snyk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # upload Snyk SARIF to code scanning
+    env:
+      # Empty on Dependabot and fork runs, which get no access to Actions
+      # secrets. Go dependency bumps are still gated by the tokenless
+      # govulncheck job in ci.yml; Snyk runs fully on trusted PRs, on push to
+      # main, and on schedule.
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          # release-assets.githubusercontent.com is where actions/setup-go
+          # fetches the Go toolchain. Without it this job dies in the setup step
+          # and never reaches the scan, so a red "Snyk Security" check means
+          # "could not run", not "found vulnerabilities".
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            release-assets.githubusercontent.com:443
+            api.snyk.io:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
 
       - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/golang@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: snyk/actions/golang@12140f4059e244892ae643824a95459a102120dd # master
         with:
           args: --severity-threshold=high
 
       - name: Upload Snyk results to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: ${{ always() && hashFiles('snyk.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: snyk.sarif
         continue-on-error: true
