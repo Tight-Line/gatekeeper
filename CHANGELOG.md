@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.16] - 2026-09-14
+
 ### Security
 - Bumped the runtime base image from `alpine:3.23.5` to `alpine:3.24.1`, picking up the patched OS packages in the current stable Alpine line. 3.23 is supported until 2027-11-01, so this is a forward move rather than an end-of-life rescue, but it is the only way OS-level fixes in the runtime image reach a gatekeeper build.
 - Bumped `step-security/harden-runner` from v2.21.0 to v2.21.1 across every workflow job. This is the action that enforces `egress-policy: block`, so it is worth keeping current on its own account.
