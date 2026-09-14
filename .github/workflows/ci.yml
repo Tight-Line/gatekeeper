@@ -95,7 +95,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
-          version: v2.11.1
+          version: v2.13.2
 
   build:
     runs-on: ubuntu-latest
@@ -160,6 +160,13 @@ jobs:
       # Tokenless, symbol-level vulnerability scan against vuln.go.dev. Runs on
       # every CI run, including Dependabot and fork PRs that cannot see secrets,
       # so dependency bumps still get a real vuln gate where Snyk and Sonar skip.
-      # Pinned via the `tool` directive in go.mod, kept current by Dependabot.
+      #
+      # Run via `go run pkg@version` rather than a go.mod `tool` directive on
+      # purpose. The tool directive drags golang.org/x/tools into the module
+      # graph, and x/tools requires goldmark v1.4.13, which carries a moderate
+      # XSS advisory (CVE-2026-5160). Nothing we ship imports goldmark, but
+      # Snyk scans the whole module graph rather than the pruned build list, so
+      # the scanner has to be kept out of the graph it is scanning. Bump the
+      # version here when a new govulncheck is released.
       - name: Run govulncheck
-        run: go tool govulncheck ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...

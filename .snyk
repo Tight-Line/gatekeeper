@@ -1,0 +1,35 @@
+# Snyk policy file. Controls what `snyk test` and the Snyk GitHub PR check
+# treat as a failure.
+#
+# Snyk resolves Go dependencies from the full `go mod graph`, not from the
+# pruned build list that `go list -deps` and govulncheck use. So it reports
+# modules that are required by something we require, but that never reach a
+# binary. Prefer removing such a module from the graph over ignoring it here;
+# this file is for advisories with no upgrade path.
+version: v1.25.1
+
+ignore:
+  # CVE-2024-51744, CWE-1118, CVSS 2.3 (low), no known exploit.
+  #
+  # This is a documentation advisory, not a code defect: golang-jwt's
+  # ParseWithClaims returns errors that a caller can mishandle by checking
+  # some and ignoring others. Snyk lists every version as affected and no
+  # fixed release exists, so there is no bump that clears it.
+  #
+  # It reaches the graph only through prometheus/client_golang and
+  # prometheus/common, which pull golang-jwt/jwt/v5 for their optional auth
+  # support. gatekeeper does not parse or verify JWTs anywhere, never calls
+  # ParseWithClaims, and the module is absent from `go list -deps ./...`, so
+  # it is not compiled into gatekeeperd or gatekeeper-relay.
+  #
+  # Revisit when golang-jwt ships a release carrying the fix that is already
+  # on master, or if gatekeeper ever starts handling JWTs itself.
+  SNYK-GOLANG-GITHUBCOMGOLANGJWTJWT-8341243:
+    - '*':
+        reason: >-
+          No fixed version exists. Transitive through prometheus/client_golang;
+          not in the build closure and gatekeeper never parses JWTs.
+        expires: 2027-03-14T00:00:00.000Z
+        created: 2026-09-14T00:00:00.000Z
+
+patch: {}
