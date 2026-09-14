@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o gatekeeperd ./cmd/gatekeeperd
 
 # Runtime stage
-FROM alpine:3.23.5
+FROM alpine:3.24.1
 
 LABEL org.opencontainers.image.source=https://github.com/Tight-Line/gatekeeper
 
