@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Bumped the runtime base image from `alpine:3.23.5` to `alpine:3.24.1`, picking up the patched OS packages in the current stable Alpine line. 3.23 is supported until 2027-11-01, so this is a forward move rather than an end-of-life rescue, but it is the only way OS-level fixes in the runtime image reach a gatekeeper build.
+- Bumped `step-security/harden-runner` from v2.21.0 to v2.21.1 across every workflow job. This is the action that enforces `egress-policy: block`, so it is worth keeping current on its own account.
+- Bumped `github/codeql-action/upload-sarif` from v4.37.9 to v4.38.0 in the Snyk workflow.
+
+### Fixed
+- `TestServer_Shutdown_ErrorPaths` only waited for one of its two blocking handlers to start, so whichever server had no request in flight returned a nil error from `Shutdown` and left its error branch uncovered. Which of the two lost the race varied by machine, so the 100% coverage gate failed intermittently on CI while passing locally. The marker added for this in 0.2.15 sat on the HTTPS branch and did nothing when the HTTP branch was the one that came up short, which is how the alpine bump above turned up red on a Dockerfile-only diff. Each server now gets its own handler and the test waits for both before shutting down, so both branches are exercised every run. The `coverage:ignore` on the HTTPS branch is gone and `internal/server` is back to a real 100%.
+
+### Changed
+- Bumped `golangci/golangci-lint-action` from v7 to v9.3.0. The pinned `golangci-lint` version is unchanged at v2.13.2.
+
 ## [0.2.15] - 2026-09-14
 
 ### Security

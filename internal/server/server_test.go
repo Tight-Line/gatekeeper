@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -200,15 +201,21 @@ func TestServer_Shutdown_WithRunningServers(t *testing.T) {
 }
 
 func TestServer_Shutdown_ErrorPaths(t *testing.T) {
-	// Create a handler that blocks until a channel is closed
+	// Each server gets its own blocking handler so the test can wait for both
+	// to have a request in flight. A single shared handler would only tell us
+	// that one of the two had started, leaving the other server with nothing to
+	// wait on at shutdown and its error branch unexercised.
 	blockCh := make(chan struct{})
-	handlerStarted := make(chan struct{})
-	var once sync.Once
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		once.Do(func() { close(handlerStarted) })
-		<-blockCh // Block until test finishes
-		w.WriteHeader(http.StatusOK)
-	})
+	newBlockingHandler := func(started chan struct{}) http.Handler {
+		var once sync.Once
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			once.Do(func() { close(started) })
+			<-blockCh // Block until test finishes
+			w.WriteHeader(http.StatusOK)
+		})
+	}
+	httpStarted := make(chan struct{})
+	httpsStarted := make(chan struct{})
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -216,10 +223,10 @@ func TestServer_Shutdown_ErrorPaths(t *testing.T) {
 	s := &Server{
 		cfg: Config{Logger: logger},
 		httpServer: &http.Server{
-			Handler: handler,
+			Handler: newBlockingHandler(httpStarted),
 		},
 		httpsServer: &http.Server{
-			Handler: handler,
+			Handler: newBlockingHandler(httpsStarted),
 		},
 	}
 
@@ -265,12 +272,15 @@ func TestServer_Shutdown_ErrorPaths(t *testing.T) {
 		_, _ = http.Get("http://" + httpsAddr + "/block")
 	}()
 
-	// Wait for handlers to start (at least one)
-	select {
-	case <-handlerStarted:
-	case <-time.After(2 * time.Second):
-		close(blockCh)
-		t.Fatal("timeout waiting for handler to start")
+	// Wait for both handlers to start, so both servers have an in-flight
+	// request when Shutdown runs and both error branches are taken.
+	for name, started := range map[string]chan struct{}{"http": httpStarted, "https": httpsStarted} {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			close(blockCh)
+			t.Fatalf("timeout waiting for %s handler to start", name)
+		}
 	}
 
 	// Shutdown with an already canceled context - should fail immediately
@@ -283,7 +293,14 @@ func TestServer_Shutdown_ErrorPaths(t *testing.T) {
 	close(blockCh)
 	requestsWg.Wait()
 
-	if err != nil {
-		t.Logf("Got expected shutdown error: %v", err)
+	// Both servers had a request in flight against a canceled context, so both
+	// must report an error.
+	if err == nil {
+		t.Fatal("Shutdown() with a canceled context and in-flight requests: got nil, want error")
+	}
+	for _, want := range []string{"http:", "https:"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Shutdown() error %q missing %q", err, want)
+		}
 	}
 }
