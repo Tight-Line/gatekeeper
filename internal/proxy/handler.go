@@ -29,6 +29,7 @@ import (
 const (
 	errInternalServerError = "Internal Server Error"
 	contentTypePlainText   = "text/plain"
+	headerXForwardedFor    = "X-Forwarded-For"
 )
 
 // HandlerOptions configures the proxy handler
@@ -656,7 +657,7 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request, route *config.
 			// client IP, silently dropping every upstream hop. Copying the
 			// inbound header onto the outbound request first makes
 			// SetXForwarded append to it, which is the old behavior.
-			pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
+			pr.Out.Header[headerXForwardedFor] = pr.In.Header[headerXForwardedFor]
 			pr.SetXForwarded()
 
 			pr.Out.URL.Scheme = destURL.Scheme
@@ -759,7 +760,7 @@ func categorizeVerificationError(err error) string {
 // If trustXForwardedFor is false, it only uses RemoteAddr.
 func (h *Handler) getClientIP(r *http.Request) string {
 	if h.trustXForwardedFor {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if xff := r.Header.Get(headerXForwardedFor); xff != "" {
 			return firstPublicIPFromXFF(xff)
 		}
 	}
