@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.15] - 2026-09-14
+
 ### Security
 - Raised the `go` directive from 1.25.6 to 1.27.1, clearing six Go standard library advisories that `govulncheck` reported as reachable from gatekeeper code: GO-2026-6218 (quadratic complexity in `net/url` path resolution, reached from webhook forwarding and JSON Schema compilation), GO-2026-6090 and GO-2026-5856 (`crypto/tls` post-handshake message flooding and an Encrypted Client Hello privacy leak, reached from the TLS listener and the Redis relay), GO-2026-6089 (`net/http` not applying `ReadHeaderTimeout` to the unencrypted HTTP/2 check, reached from the webhook and metrics listeners), GO-2026-5972 (unbounded recursion in `encoding/asn1`, reached from SendGrid public key parsing), and GO-2026-5026 (`golang.org/x/net/idna` accepting ASCII-only Punycode labels, reached from outbound HTTP). The 1.25 line is end-of-life now that Go 1.27 has shipped, so it had to move regardless of the advisories. 1.27.1 is the current release, and the `go` directive and both builder images now track it.
 - Upgraded `golang.org/x/text` to v0.42.0 for GO-2026-5970, an infinite loop on malformed input in the normalization code reached through `autocert.HostWhitelist`.
