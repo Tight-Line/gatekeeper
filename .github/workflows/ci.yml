@@ -17,6 +17,10 @@ jobs:
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
+          # keybase.io hosts the Codecov signing key. The uploader fetches it to
+          # verify the CLI's GPG signature and aborts when the import comes back
+          # empty, so without this the step fails with "Could not verify
+          # signature" rather than anything that names a blocked host.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -27,6 +31,8 @@ jobs:
             raw.githubusercontent.com:443
             cli.codecov.io:443
             ingest.codecov.io:443
+            api.codecov.io:443
+            keybase.io:443
             *.ingest.us.sentry.io:443
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,6 +68,11 @@ jobs:
           # download only happens when the runner image does not already ship the
           # Go version in go.mod, so a missing endpoint here stays invisible until
           # the pinned Go moves ahead of the image.
+          #
+          # golangci-lint.run serves the JSON schema that `golangci-lint config
+          # verify` validates .golangci.yml against. The action runs that check
+          # before any linting, so blocking it fails the job in 13s with a schema
+          # load error that looks nothing like a network problem.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -71,6 +82,7 @@ jobs:
             storage.googleapis.com:443
             release-assets.githubusercontent.com:443
             raw.githubusercontent.com:443
+            golangci-lint.run:443
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
