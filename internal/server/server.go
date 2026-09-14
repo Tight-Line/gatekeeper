@@ -125,7 +125,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 	if s.httpsServer != nil {
-		if err := s.httpsServer.Shutdown(ctx); err != nil { // coverage:ignore - symmetric to http branch above; error path requires unreliable race in tests
+		if err := s.httpsServer.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("https: %w", err))
 		}
 	}
