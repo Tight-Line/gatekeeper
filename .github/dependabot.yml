@@ -1,0 +1,48 @@
+version: 2
+updates:
+  # Go modules
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # Roll routine minor/patch bumps into one PR; majors stay separate.
+      go-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      # Security fixes are grouped on their own so they land fast and visibly.
+      go-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # GitHub Actions used by the workflows in .github/workflows. Every `uses:` is
+  # pinned to a full commit SHA with the version in a trailing comment, which is
+  # the form Dependabot updates.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      actions-all:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # Base images in Dockerfile and Dockerfile.relay
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

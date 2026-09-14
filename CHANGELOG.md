@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Raised the `go` directive from 1.25.6 to 1.26.8, clearing six Go standard library advisories that `govulncheck` reported as reachable from gatekeeper code: GO-2026-6218 (quadratic complexity in `net/url` path resolution, reached from webhook forwarding and JSON Schema compilation), GO-2026-6090 and GO-2026-5856 (`crypto/tls` post-handshake message flooding and an Encrypted Client Hello privacy leak, reached from the TLS listener and the Redis relay), GO-2026-6089 (`net/http` not applying `ReadHeaderTimeout` to the unencrypted HTTP/2 check, reached from the webhook and metrics listeners), GO-2026-5972 (unbounded recursion in `encoding/asn1`, reached from SendGrid public key parsing), and GO-2026-5026 (`golang.org/x/net/idna` accepting ASCII-only Punycode labels, reached from outbound HTTP). The 1.25 line is end-of-life now that Go 1.27 has shipped, so 1.26 is the oldest line that still receives patches.
+- Upgraded `golang.org/x/text` to v0.42.0 for GO-2026-5970, an infinite loop on malformed input in the normalization code reached through `autocert.HostWhitelist`.
+- Added a `govulncheck` job to CI. It is tokenless, so unlike Snyk and SonarCloud it runs for real on Dependabot and fork pull requests, where those two skip and report green without scanning anything.
+- Pinned every GitHub Actions `uses:` to a full commit SHA, replacing floating tags including `snyk/actions/golang@master`, so a retagged or compromised release cannot run with a job's token.
+- Added `step-security/harden-runner` with `egress-policy: block` and an explicit endpoint allowlist to every workflow job.
+- Added `.github/dependabot.yml` covering Go modules, GitHub Actions and Docker base images. The repository previously had no version updates configured and no dependency graph, so the backlog was invisible rather than absent.
+- Bumped the runtime base image from `alpine:3.23.3` to `alpine:3.23.5`.
+
+### Changed
+- Updated dependencies to current releases: `miniredis` v2.39.0, `gojq` v0.12.19, `prometheus/client_golang` v1.24.1, `go-redis/v9` v9.22.0, `golang.org/x/crypto` v0.57.0, `golang.org/x/time` v0.16.0.
+- Workflows now read the Go version from `go.mod` via `go-version-file` instead of hardcoding it in each job, so the `go` directive is the single place to bump it.
+
 ## [0.2.14] - 2026-06-16
 
 ### Fixed
