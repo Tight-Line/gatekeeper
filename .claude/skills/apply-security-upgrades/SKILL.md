@@ -43,6 +43,21 @@ will ever be opened, so a quiet backlog looks identical to a clean repo. Zero
 alerts from a repo with no dependency graph means the same thing. In that state
 the survey has to come from the tools directly; see step 4.
 
+Check that the scanners are still switched on, too. GitHub disables a workflow
+whose only trigger is `schedule` after 60 days without repository activity, and
+it does so silently: the workflow simply stops running, no check goes red, and
+the last run sits there green forever.
+
+```bash
+gh api repos/Tight-Line/gatekeeper/actions/workflows \
+  --jq '.workflows[] | "\(.state)\t\(.name)"'   # look for disabled_inactivity
+gh workflow enable snyk.yml                     # to switch one back on
+```
+
+This is how `snyk.yml` went dark here: it last ran on its weekly cron in
+August, was disabled for inactivity, and then did not run on the 2026-09 pass
+at all until it was re-enabled by hand.
+
 For each PR that does exist, check it is a forward bump and not stale; `main` may
 already carry a newer bump of the same group:
 
@@ -253,6 +268,31 @@ Then widen the `cut` on the one interesting line, because the real cause is ofte
 past column 200. A truncated `unable to download ...` can end in `got status
 "504 Gateway Timeout"`, which is a transient, not a bug.
 
+#### An expired scanner token looks exactly like a finding
+
+Both scanner tokens expire, and neither failure says so plainly. Snyk is the
+honest one; SonarCloud blames its own config:
+
+```
+ERROR   Authentication error (SNYK-0005)
+Status: 401 Unauthorized
+
+ERROR Failed to query JRE metadata: . Please check the property sonar.token
+      or the environment variable SONAR_TOKEN.
+```
+
+The Sonar message reads like a workflow bug, and the empty detail after the
+colon is the giveaway that the request failed rather than returned anything.
+Check the secret's age before touching the workflow:
+
+```bash
+gh secret list   # updated dates, which is the closest thing to an expiry
+```
+
+Both were dead in the 2026-09 pass, `SONAR_TOKEN` for roughly eight months. Only
+a human can rotate them, so raise it early rather than at the end: the branch
+cannot go fully green without it, and no amount of allowlist work will help.
+
 #### harden-runner egress blocks (the recurring one)
 
 Every job runs `step-security/harden-runner` with `egress-policy: block` and an
@@ -273,7 +313,13 @@ anyway, then break everything at once:
 - `vuln.go.dev:443` is govulncheck's database.
 - `api.snyk.io:443` is Snyk.
 - `cli.codecov.io:443` and `ingest.codecov.io:443` are the Codecov uploader,
-  which also reports to `*.ingest.us.sentry.io:443`.
+  which also reports to `*.ingest.us.sentry.io:443`. It additionally fetches
+  its signing key from `keybase.io:443`; block that and the step aborts with
+  `Could not verify signature`, which names no host at all.
+- `golangci-lint.run:443` serves the JSON schema that `golangci-lint config
+  verify` validates `.golangci.yml` against. The action runs that before it
+  lints anything, so the job dies in about 13 seconds with a schema load error
+  that reads like a config problem.
 - `ghcr.io:443`, `pkg-containers.githubusercontent.com:443`,
   `registry-1.docker.io:443`, `auth.docker.io:443` and
   `production.cloudfront.docker.com:443` are the image build and push jobs.
@@ -340,10 +386,28 @@ trailing comment so Dependabot can still track it.
 This repo enforces 100% coverage via `scripts/check-coverage.sh`, wired into
 `make test-coverage-check` and into CI. Dependency bumps rarely move it, but a
 `go mod tidy` that drops or adds a file can, and a new `tool` directive pulls in
-packages that must not end up in the coverage set. A coverage failure is the
-local gate's failure and reproduces locally; fix it with a test, not with
-`coverage:ignore`. See the Test Coverage Exclusions section in `AGENTS.md` for
-the narrow cases where an ignore is legitimate.
+packages that must not end up in the coverage set. Fix a real gap with a test,
+not with `coverage:ignore`; see the Test Coverage Exclusions section in
+`AGENTS.md` for the narrow cases where an ignore is legitimate, and note that it
+asks you to get the developer's agreement first.
+
+The exception is the timing-dependent lines in `internal/relay/redis_manager.go`,
+where whether a branch is reached depends on a race between an `XReadGroup` block
+timeout and a context deadline. Those come out covered on a fast machine and
+uncovered on a CI runner, so this is the one coverage failure that does **not**
+reproduce locally. Confirm which kind you have before changing any code:
+
+```bash
+for i in 1 2 3 4 5; do
+  go test -race -coverprofile=/tmp/c$i.out -covermode=atomic -tags=ci ./internal/relay/ >/dev/null 2>&1
+  echo "run $i: $(grep 'redis_manager.go:<line>' /tmp/c$i.out | awk '{print $NF}')"
+done
+gh run rerun <run_id> --failed   # a pass on re-run settles it
+```
+
+Note that the script only looks for `coverage:ignore` on the uncovered line
+itself or the line directly above it, so an ignore on an enclosing `if` does not
+cover a branch nested inside it.
 
 #### Sonar quality gate
 
