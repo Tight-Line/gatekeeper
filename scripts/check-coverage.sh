@@ -8,7 +8,15 @@
 #
 # Mark untestable code with: // coverage:ignore - <reason>
 #
-# The comment must be on the same line as the uncovered code, or the line before.
+# The comment must be on the same line as the uncovered code, or within the two
+# lines before it.
+#
+# Two lines, not one, because Go does not attribute an uncovered block to a
+# fixed position. For `// marker`, `if cond {`, `stmt`, the profile sometimes
+# names the `if` line (the condition never evaluated) and sometimes the `stmt`
+# line (the condition evaluated, the body never taken), and which one you get
+# depends on test timing. A one-line window catches the first and misses the
+# second, so the same marker passes or fails run to run. Two lines covers both.
 
 set -e
 
@@ -42,8 +50,8 @@ while IFS= read -r line; do
 
     [[ ! -f "$REL_PATH" ]] && continue
 
-    # Check if line or previous line has coverage:ignore
-    PREV_LINE=$((START_LINE - 1))
+    # Check if the line or either of the two before it has coverage:ignore
+    PREV_LINE=$((START_LINE - 2))
     CONTEXT=$(sed -n "${PREV_LINE},${START_LINE}p" "$REL_PATH" 2>/dev/null || true)
 
     if ! echo "$CONTEXT" | grep -q "coverage:ignore"; then
@@ -71,7 +79,9 @@ if [[ "$1" == "--codecov" ]]; then
             START_LINE=$(echo "$line" | cut -d: -f2 | cut -d. -f1)
             REL_PATH=$(echo "$PKG_FILE" | sed "s|^$MODULE_PATH/||")
             if [[ -f "$REL_PATH" ]]; then
-                PREV_LINE=$((START_LINE - 1))
+                # Same two-line window as the gate above; the two must agree or
+                # Codecov and the gate disagree about what counts as ignored.
+                PREV_LINE=$((START_LINE - 2))
                 CONTEXT=$(sed -n "${PREV_LINE},${START_LINE}p" "$REL_PATH" 2>/dev/null || true)
                 if echo "$CONTEXT" | grep -q "coverage:ignore"; then
                     # Mark as covered for Codecov

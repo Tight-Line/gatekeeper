@@ -148,7 +148,7 @@ trusting the earlier green run.
 With no Dependabot PRs to inherit from, the backlog comes from the tools:
 
 ```bash
-go tool govulncheck ./...                                      # symbol-level, authoritative
+go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...   # symbol-level, authoritative
 go list -u -m -f '{{if and .Update (not .Indirect)}}{{.Path}} {{.Version}} -> {{.Update.Version}}{{end}}' all
 ```
 
@@ -174,7 +174,7 @@ Run the repo gate locally before pushing:
 
 ```bash
 make check                 # lint + test-coverage-check + build-all
-go tool govulncheck ./...
+go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 ```
 
 Both are slow. Run them in the background and **read the real output**, not a
@@ -204,16 +204,30 @@ Prefer the **latest patch on the current minor line**: a minor bump changes
 language semantics and vet/lint behavior and does not belong in a security pass.
 The exception is when the current line is end-of-life. Go supports only the two
 most recent minors, so once `1.N+2` ships, `1.N` stops getting patches and
-staying on it means the next stdlib CVE has no fix at all. In that case move to
-the oldest still-supported line, not to the newest one, so the semantic drift is
-as small as it can be while still leaving somewhere to bump to next time. The
-2026-09 pass moved `1.25.6` to `1.26.8` for exactly this reason: every finding
-was patched in `1.25.13`, but `1.27` had shipped and `1.25.14` was the end of
-that line.
+staying on it means the next stdlib CVE has no fix at all. In that case move to the
+current release rather than the oldest line that is merely still supported, so
+the next pass is not doing this again immediately. The 2026-09 pass moved
+`1.25.6` to `1.27.1` for exactly this reason: every finding was patched in
+`1.25.13`, but `1.27` had shipped and `1.25.14` was the end of that line.
+
+Budget for a minor bump costing more than the directive:
+
+- It drags the lint toolchain with it. `golangci-lint` refuses to run at all
+  when the Go it was built with is older than the target, with `the Go language
+  version (go1.26) used to build golangci-lint is lower than the targeted Go
+  version (1.27.1)`. The pinned version in `ci.yml` has to move to a release
+  built with the new Go, and a local binary on `PATH` has to move too or the
+  local gate disagrees with CI.
+- That newer linter brings newer `staticcheck` rules, which surface deprecations
+  the old one never mentioned. The 2026-09 pass turned up
+  `httputil.ReverseProxy.Director`, deprecated in Go 1.26, in the forwarding path.
+- Go can change which line it attributes an uncovered block to. A `coverage:ignore`
+  marker that sits a fixed distance from the code can stop matching, so plan for
+  the coverage gate to fail on code the bump never touched.
 
 ```bash
 go mod edit -go=<version>    # does not add a `toolchain` directive; keep it that way
-go tool govulncheck ./...    # must print "No vulnerabilities found."
+go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...    # must print "No vulnerabilities found."
 ```
 
 The version is pinned in more places than `go.mod`. Miss one and CI keeps
@@ -225,7 +239,7 @@ grep -rn "go-version\|golang:" .github/workflows/ Dockerfile Dockerfile.relay
 
 Prefer `go-version-file: go.mod` in every workflow over a hardcoded string, so
 there is exactly one place to bump next time. The Dockerfiles track a minor line
-(`golang:1.26-alpine`) and pick up patches on their own, so they only need
+(`golang:1.27-alpine`) and pick up patches on their own, so they only need
 touching on a minor bump.
 
 Confirm the bump against the real output. A local toolchain older than the new
@@ -235,7 +249,7 @@ used as-is, so `govulncheck` locally reports against that newer toolchain, not
 against the directive. Check which one it used before concluding anything:
 
 ```bash
-go tool govulncheck ./... | grep -oE 'go1\.[0-9]+\.[0-9]+' | sort -u
+go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./... | grep -oE 'go1\.[0-9]+\.[0-9]+' | sort -u
 ```
 
 The Dockerfile builder image and the `go` directive do **not** need to match. A

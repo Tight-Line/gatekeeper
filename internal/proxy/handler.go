@@ -647,38 +647,49 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request, route *config.
 
 	// Create reverse proxy
 	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			req.URL.Scheme = destURL.Scheme
-			req.URL.Host = destURL.Host
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			// X-Forwarded-For: reproduce what Director got for free.
+			//
+			// ReverseProxy appended the client IP to the inbound chain only for
+			// Director. Rewrite does not touch the header at all, and
+			// SetXForwarded on its own would replace the chain with just the
+			// client IP, silently dropping every upstream hop. Copying the
+			// inbound header onto the outbound request first makes
+			// SetXForwarded append to it, which is the old behavior.
+			pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
+			pr.SetXForwarded()
+
+			pr.Out.URL.Scheme = destURL.Scheme
+			pr.Out.URL.Host = destURL.Host
 			// Combine destination path with any suffix from prefix matching
-			req.URL.Path = strings.TrimSuffix(destURL.Path, "/") + pathSuffix
-			if req.URL.Path == "" {
-				req.URL.Path = "/"
+			pr.Out.URL.Path = strings.TrimSuffix(destURL.Path, "/") + pathSuffix
+			if pr.Out.URL.Path == "" {
+				pr.Out.URL.Path = "/"
 			}
 			// Merge query params: preserve destination params and add request params
 			switch {
 			case destURL.RawQuery != "" && r.URL.RawQuery != "":
-				req.URL.RawQuery = destURL.RawQuery + "&" + r.URL.RawQuery
+				pr.Out.URL.RawQuery = destURL.RawQuery + "&" + r.URL.RawQuery
 			case r.URL.RawQuery != "":
-				req.URL.RawQuery = r.URL.RawQuery
+				pr.Out.URL.RawQuery = r.URL.RawQuery
 			default:
-				req.URL.RawQuery = destURL.RawQuery
+				pr.Out.URL.RawQuery = destURL.RawQuery
 			}
 			// Set Host header - preserve original or use destination based on config
 			if route.PreserveHost {
-				req.Host = r.Host
+				pr.Out.Host = r.Host
 			} else {
-				req.Host = destURL.Host
+				pr.Out.Host = destURL.Host
 			}
 
 			// Restore body
-			req.Body = io.NopCloser(bytes.NewReader(body))
-			req.ContentLength = int64(len(body))
+			pr.Out.Body = io.NopCloser(bytes.NewReader(body))
+			pr.Out.ContentLength = int64(len(body))
 
-			// Add X-Forwarded headers
-			// Note: X-Forwarded-For is handled by httputil.ReverseProxy automatically
-			// (it appends to existing chain correctly)
-			req.Header.Set("X-Forwarded-Host", r.Host)
+			// SetXForwarded also wrote X-Forwarded-Host and X-Forwarded-Proto
+			// from the inbound request. Overwrite both: the proto below honors
+			// an existing inbound X-Forwarded-Proto, which SetXForwarded does not.
+			pr.Out.Header.Set("X-Forwarded-Host", r.Host)
 
 			// Detect protocol from TLS or preserve existing X-Forwarded-Proto
 			proto := "http"
@@ -687,7 +698,7 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request, route *config.
 			} else if existing := r.Header.Get("X-Forwarded-Proto"); existing != "" {
 				proto = existing
 			}
-			req.Header.Set("X-Forwarded-Proto", proto)
+			pr.Out.Header.Set("X-Forwarded-Proto", proto)
 		},
 	}
 
