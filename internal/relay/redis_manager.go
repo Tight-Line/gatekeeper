@@ -353,9 +353,10 @@ func (m *RedisManager) pollNewMessage(ctx context.Context, key string) (*Webhook
 
 	// coverage:ignore - timing edge case: XReadGroup timeout vs context cancellation race
 	if err == redis.Nil {
-		// coverage:ignore - same race as the surrounding branches; whether the
-		// context has already expired by the time the block times out depends on
-		// machine speed, so this is covered locally but not reliably on CI runners
+		// Same race as the surrounding branches: whether the context has already
+		// expired by the time the block times out depends on machine speed, so
+		// this is covered locally but not reliably on CI runners.
+		// coverage:ignore - XReadGroup block timeout vs context deadline race
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}

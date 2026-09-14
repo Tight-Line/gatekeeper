@@ -405,9 +405,14 @@ done
 gh run rerun <run_id> --failed   # a pass on re-run settles it
 ```
 
-Note that the script only looks for `coverage:ignore` on the uncovered line
-itself or the line directly above it, so an ignore on an enclosing `if` does not
-cover a branch nested inside it.
+Two things about how the script reads the marker, both of which cost a CI round
+if you get them wrong. It looks for `coverage:ignore` **only** on the uncovered
+line itself or the line immediately above it, so:
+
+- An ignore on an enclosing `if` does not cover a branch nested inside it.
+- In a multi-line comment, the marker has to be on the **last** line of the
+  block. Lead with the prose and put `coverage:ignore - <reason>` on the line
+  that touches the code, not at the top of the comment.
 
 #### Sonar quality gate
 
