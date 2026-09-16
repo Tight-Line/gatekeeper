@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.17] - 2026-09-16
+
 ### Security
 - Upgraded the Alpine packages in the runtime stage of both images. `alpine:3.24.1` still ships `libcrypto3` and `libssl3` at 3.5.7-r0, which carry twenty open advisories including `CVE-2026-14456` (HIGH), and `apk-tools` links against both so they are present whether or not the Dockerfile installs them. The v3.24 apk repository already has the fixed 3.5.8-r0 and there is no newer base image tag to pick it up, so the runtime stage now runs `apk upgrade` at build time. This also keeps taking patched packages whenever the repository gets ahead of the tag, instead of waiting on a 3.24.2 that may never be cut. The cost is that image contents depend on build date as well as the tag, so two builds of the same commit can differ.
 
