@@ -25,7 +25,10 @@ FROM alpine:3.24.1
 
 LABEL org.opencontainers.image.source=https://github.com/Tight-Line/gatekeeper
 
-RUN apk --no-cache add ca-certificates
+# Pick up patched packages from the v3.24 repo; the base image tag lags
+# behind apk for openssl and similar security updates.
+RUN apk --no-cache upgrade && \
+    apk --no-cache add ca-certificates
 
 WORKDIR /app
 
