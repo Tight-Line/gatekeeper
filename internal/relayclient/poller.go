@@ -77,9 +77,8 @@ func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logge
 		maxConsecutiveFailures: cfg.MaxConsecutiveFailures,
 		workers:                workers,
 		debugPayloads:          cfg.DebugPayloads,
-		client: &http.Client{
-			Timeout: 60 * time.Second, // Longer than server poll timeout
-		},
+		// Longer than the server's poll timeout.
+		client:     newHTTPClient(60 * time.Second),
 		minBackoff: 100 * time.Millisecond,
 		maxBackoff: 30 * time.Second,
 	}
