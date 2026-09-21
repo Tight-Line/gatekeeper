@@ -33,6 +33,16 @@ const (
 	// Default timeout for blocking operations
 	defaultBlockTimeout = 30 * time.Second
 
+	// Connection pool size. go-redis defaults this to 10*GOMAXPROCS, which is the
+	// wrong basis here: a relay client parks one blocking XREADGROUP per channel for
+	// the poll's whole duration, so the pool has to clear the CHANNEL count rather
+	// than track the CPU count. Go rounds a sub-2-core cgroup quota up to
+	// GOMAXPROCS=2, making that default 20, and any client with more channels than
+	// that pins every connection in the pool. Inbound XAdd then waits the full
+	// PoolTimeout (ReadTimeout+1s) before it can even queue the webhook. A URI that
+	// sets ?pool_size= still wins.
+	defaultPoolSize = 200
+
 	// Recovery settings
 	defaultRecoveryInterval = 30 * time.Second // How often to check for stuck messages
 	pendingIdleTimeout      = 30 * time.Second // How long a message can be pending before reclaim
@@ -112,6 +122,12 @@ func parseRedisURI(uri string) (*redis.Options, error) {
 	opts, err := redis.ParseURL(normalizedURI)
 	if err != nil {
 		return nil, err
+	}
+
+	// ParseURL leaves PoolSize at 0 unless the URI carried ?pool_size=, and 0 is
+	// what makes go-redis fall back to 10*GOMAXPROCS. See defaultPoolSize.
+	if opts.PoolSize == 0 {
+		opts.PoolSize = defaultPoolSize
 	}
 
 	return opts, nil

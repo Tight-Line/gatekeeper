@@ -345,6 +345,30 @@ func TestRedisManager_ConnectedCount(t *testing.T) {
 	}
 }
 
+func TestParseRedisURIPoolSize(t *testing.T) {
+	t.Run("defaults above the channel count", func(t *testing.T) {
+		opts, err := parseRedisURI("redis://localhost:6379")
+		if err != nil {
+			t.Fatalf("parseRedisURI() error = %v", err)
+		}
+		// 0 would let go-redis fall back to 10*GOMAXPROCS, which is what starves
+		// a client that has more channels than the container has CPU.
+		if opts.PoolSize != defaultPoolSize {
+			t.Errorf("PoolSize = %d, want %d", opts.PoolSize, defaultPoolSize)
+		}
+	})
+
+	t.Run("URI pool_size wins", func(t *testing.T) {
+		opts, err := parseRedisURI("valkey://localhost:6379?pool_size=17")
+		if err != nil {
+			t.Fatalf("parseRedisURI() error = %v", err)
+		}
+		if opts.PoolSize != 17 {
+			t.Errorf("PoolSize = %d, want 17", opts.PoolSize)
+		}
+	})
+}
+
 func TestParseRedisURI(t *testing.T) {
 	tests := []struct {
 		name    string
