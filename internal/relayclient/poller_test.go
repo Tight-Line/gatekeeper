@@ -736,16 +736,16 @@ func TestNewPoller_DefaultWorkers(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	forwarder := NewForwarder("http://localhost:8080", "test", logger, false)
 
-	// Test with 0 workers (should default to 1)
+	// Test with 0 workers (should default to DefaultWorkers)
 	p := NewPoller("http://relay.example.com", "token123", "test-channel", forwarder, logger, PollerConfig{MaxConsecutiveFailures: 5, Workers: 0})
-	if p.workers != 1 {
-		t.Errorf("expected workers 1 (default), got %d", p.workers)
+	if p.workers != DefaultWorkers {
+		t.Errorf("expected workers %d (default), got %d", DefaultWorkers, p.workers)
 	}
 
-	// Test with negative workers (should default to 1)
+	// Test with negative workers (should default to DefaultWorkers)
 	p = NewPoller("http://relay.example.com", "token123", "test-channel", forwarder, logger, PollerConfig{MaxConsecutiveFailures: 5, Workers: -1})
-	if p.workers != 1 {
-		t.Errorf("expected workers 1 (default), got %d", p.workers)
+	if p.workers != DefaultWorkers {
+		t.Errorf("expected workers %d (default), got %d", DefaultWorkers, p.workers)
 	}
 
 	// Test with explicit workers
