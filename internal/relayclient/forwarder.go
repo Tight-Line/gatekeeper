@@ -41,9 +41,7 @@ func NewForwarder(destination, channelName string, logger *slog.Logger, debugPay
 		logger:        logger,
 		debugPayloads: debugPayloads,
 		preservePath:  true,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client:        newHTTPClient(30 * time.Second),
 	}
 }
 
