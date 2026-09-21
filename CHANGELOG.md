@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-21
+
 ### Changed
 - Raised the default `workers` per relay channel from 1 to 4. A channel's poll loop hands each webhook to its worker pool over a Go channel buffered at the worker count, so a single worker allowed one webhook in flight plus one buffered, and the third blocked the poll loop itself. The channel stopped polling until a delivery finished, which capped its throughput at one webhook per destination round-trip and let a slow destination stall that channel's queue drain rather than merely slow it. Channels now deliver up to 4 webhooks at a time, in no guaranteed order, so set `workers: 1` on any channel that needs strictly serial delivery.
 
