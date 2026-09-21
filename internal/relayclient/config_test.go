@@ -381,8 +381,8 @@ func TestChannelConfig_GetWorkers(t *testing.T) {
 		workers int
 		want    int
 	}{
-		{"default (0)", 0, 1},
-		{"negative", -1, 1},
+		{"default (0)", 0, DefaultWorkers},
+		{"negative", -1, DefaultWorkers},
 		{"one", 1, 1},
 		{"multiple", 10, 10},
 	}

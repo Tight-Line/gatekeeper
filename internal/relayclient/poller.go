@@ -66,7 +66,7 @@ type PollerConfig struct {
 func NewPoller(serverURL, token, channelName string, forwarder *Forwarder, logger *slog.Logger, cfg PollerConfig) *Poller {
 	workers := cfg.Workers
 	if workers <= 0 {
-		workers = 1
+		workers = DefaultWorkers
 	}
 	return &Poller{
 		serverURL:              serverURL,

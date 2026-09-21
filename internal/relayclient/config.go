@@ -21,15 +21,22 @@ type Config struct {
 	MaxConsecutiveFailures int             `yaml:"max_consecutive_failures"` // 0 means use default
 }
 
-// DefaultWorkers is the default number of concurrent workers per channel
-const DefaultWorkers = 1
+// DefaultWorkers is the default number of concurrent workers per channel.
+//
+// A channel's poll loop hands each webhook to its worker pool over a Go channel
+// buffered at the worker count, so a single worker allows one webhook in flight
+// plus one buffered, and the third blocks pollLoop itself: the relay channel
+// stops polling until a delivery finishes, and its throughput is capped at one
+// webhook per destination round-trip. A channel that needs strictly serial
+// delivery should set workers: 1 explicitly.
+const DefaultWorkers = 4
 
 // ChannelConfig represents a single relay channel configuration
 type ChannelConfig struct {
 	Name         string `yaml:"name"`
 	Token        string `yaml:"token"`
 	Destination  string `yaml:"destination"`
-	Workers      int    `yaml:"workers"`                 // Number of concurrent workers (default: 1)
+	Workers      int    `yaml:"workers"`                 // Number of concurrent workers (default: DefaultWorkers)
 	PreservePath *bool  `yaml:"preserve_path,omitempty"` // Append webhook path to destination URL (default: true)
 }
 
