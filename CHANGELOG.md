@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Sized the Redis connection pool for the number of relay channels rather than for the container's CPU allocation. go-redis defaults `PoolSize` to `10 * GOMAXPROCS`, and Go rounds a sub-2-core cgroup quota up to `GOMAXPROCS=2`, so a gatekeeperd running under a 500m CPU limit got a pool of 20. Each connected relay channel parks a blocking `XREADGROUP` that holds one of those connections for the full 30s poll, so a client with more channels than the pool pinned every connection in it. Queueing an inbound webhook then waited the whole `PoolTimeout` (6s by default), hit `ErrPoolTimeout`, retried and succeeded, which added a silent 6 seconds to every relayed request without logging anything. The pool now defaults to 200, and a `?pool_size=` on the Redis URI still overrides it.
+
 ## [0.2.17] - 2026-09-16
 
 ### Security
