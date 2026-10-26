@@ -25,7 +25,7 @@ jobs:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: block
           # release-assets.githubusercontent.com is where actions/setup-go
@@ -50,13 +50,13 @@ jobs:
 
       - name: Run Snyk to check for vulnerabilities
         if: ${{ env.SNYK_TOKEN != '' }}
-        uses: snyk/actions/golang@12140f4059e244892ae643824a95459a102120dd # master
+        uses: snyk/actions/golang@11b673cfb4b0dc0d860a1323caa199d54950dcce # master
         with:
           args: --severity-threshold=high
 
       - name: Upload Snyk results to GitHub Code Scanning
         if: ${{ always() && hashFiles('snyk.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: snyk.sarif
         continue-on-error: true
